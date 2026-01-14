@@ -2,44 +2,49 @@
 
 <img width="1819" height="1738" alt="hero" src="https://github.com/user-attachments/assets/347757fd-ad00-487d-bdd8-97113f13878b" />
 
-An inbound lead qualification and research agent built with [Next.js](http://nextjs.org/), [AI SDK](https://ai-sdk.dev/), [Workflow DevKit](https://useworkflow.dev/), and the [Vercel Slack Adapter](https://github.com/vercel-labs/slack-bolt). Hosted on the [Vercel AI Cloud](https://vercel.com/blog/the-ai-cloud-a-unified-platform-for-ai-workloads).
+An inbound lead qualification and research agent built with [Next.js](http://nextjs.org/), [AI SDK](https://ai-sdk.dev/), and [Workflow DevKit](https://useworkflow.dev/). Supports Facebook Lead Ads webhooks with automatic enrichment and email reports. Hosted on the [Vercel AI Cloud](https://vercel.com/blog/the-ai-cloud-a-unified-platform-for-ai-workloads).
 
 **_This is meant to serve as a reference architecture to be adapted to the needs of your specific organization._**
 
 ## Overview
 
-Lead agent app that captures a lead in a contact sales form and then kicks off a qualification workflow and deep research agent. It integrates with Slack to send and receive messages for human-in-the-loop feedback.
+Lead agent app that captures leads from contact forms and Facebook Lead Ads, then kicks off enrichment workflows with automatic email reporting.
+
+### Lead Sources
+
+1. **Contact Form** - Web form submission triggers qualification workflow
+2. **Facebook Lead Ads** - Meta webhook integration for lead ad campaigns
+
+### Features
 
 - **Immediate Response** - Returns a success response to the user upon submission
-- **Workflows** - Uses Workflow DevKit to kick off durable background tasks
-  - **Deep Research Agent** - Conducts comprehensive research on the lead with a deep research agent
-  - **Qualify Lead** - Uses `generateObject` to categorize the lead based on the lead data and research report
-  - **Write Email** - Generates a personalized response email
-  - **Human-in-the-Loop** - Sends to Slack for human approval before sending
-  - **Slack Webhook** - Catches a webhook event from Slack to approve or deny the email
-
-## Deploy with Vercel
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Flead-agent&env=AI_GATEWAY_API_KEY,SLACK_BOT_TOKEN,SLACK_SIGNING_SECRET,SLACK_CHANNEL_ID,EXA_API_KEY&project-name=lead-agent&repository-name=lead-agent)
+- **Durable Workflows** - Uses Workflow DevKit for background task execution
+- **Lead Enrichment Pipeline**:
+  - **PAO Property Lookup** - Manatee County Property Appraiser data
+  - **Exa Web Research** - Public profile and web presence discovery
+  - **Demographics** - ZIP-based demographic insights
+  - **Lead Scoring** - 0-100 score with tier assignment (HOT/WARM/NURTURE)
+- **Email Reports** - Automatic internal reports via Resend (no Slack required)
 
 ## Architecture
 
-<img width="1778" height="1958" alt="architecture" src="https://github.com/user-attachments/assets/53943961-4692-4b42-8e8d-47b03a01d233" />
-
 ```
-User submits form
-     ↓
-start(workflow) ← (Workflow DevKit)
-     ↓
-Research agent ← (AI SDK Agent)
-     ↓
-Qualify lead ← (AI SDK generateObject)
-     ↓
-Generate email ← (AI SDK generateText)
-     ↓
-Slack approval (human-in-the-loop) ← (Slack integration)
-     ↓
-Send email (on approval)
+Lead Sources:
+├── Contact Form (POST /api/submit)
+│   └── workflowInbound
+│       ├── stepResearch (AI agent)
+│       ├── stepQualify (generateObject)
+│       ├── stepWriteEmail
+│       └── stepSendInboundReportEmail
+│
+└── Facebook Lead Ads (POST /api/meta/webhook)
+    └── workflowMetaLead
+        ├── stepInitializeReport
+        ├── stepEnrichPao (property lookup)
+        ├── stepEnrichExa (web research)
+        ├── stepEnrichDemographics
+        ├── stepScoreLead (0-100 scoring)
+        └── stepSendReportEmail
 ```
 
 ## Tech Stack
@@ -47,22 +52,13 @@ Send email (on approval)
 - **Framework**: [Next.js 16](https://nextjs.org)
 - **Durable execution**: [Workflow DevKit](http://useworkflow.dev/)
 - **AI**: [Vercel AI SDK](https://ai-sdk.dev/) with [AI Gateway](https://vercel.com/ai-gateway)
-- **Human-in-the-Loop**: [Slack Bolt + Vercel Slack Bolt adapter](https://vercel.com/templates/ai/slack-agent-template)
+- **Email**: [Resend](https://resend.com)
 - **Web Search**: [Exa.ai](https://exa.ai/)
+- **Property Data**: Manatee County PAO scraper (Playwright)
 
-## Slack Integration
+## Deploy with Vercel
 
-This repo uses [Slack's Bolt for JavaScript](https://docs.slack.dev/tools/bolt-js/) with the [Vercel Slack Bolt adapter](https://vercel.com/changelog/build-slack-agents-with-vercel-slack-bolt).
-
-Slack's Bolt is the recommended way to build Slack apps with the latest platform features. While Bolt was designed for traditional long-running Node servers, Vercel's `@vercel/slack-bolt` adapter allows use of it in a serverless environment. Combining Slack's Bolt with Vercel's adapter reduces complexity and makes it easy to subscribe to Slack events and perform actions in your app.
-
-## Using this template
-
-This repo contains various empty functions to serve as placeholders. To fully use this template, fill out empty functions in `lib/services.ts`.
-
-Example: Add a custom implementation of searching your own knowledge base in `queryKnowledgeBase`.
-
-Additionally, update prompts to meet the needs of your specific business function.
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmasonjames%2Flead-agent&env=AI_GATEWAY_API_KEY,EXA_API_KEY,RESEND_API_KEY,REPORT_TO_EMAIL&project-name=lead-agent&repository-name=lead-agent)
 
 ## Getting Started
 
@@ -70,20 +66,21 @@ Additionally, update prompts to meet the needs of your specific business functio
 
 - Node.js 20+
 - pnpm (recommended) or npm
-- Slack workspace with bot token and signing secret
-  - Reference the [Vercel Slack agent template docs](https://github.com/vercel-partner-solutions/slack-agent-template) for creating a Slack app
-  - You can set the permissions and configuration for your Slack app in the `manifest.json` file in the root of this repo. Paste this manifest file into the Slack dashboard when creating the app
-  - **Be sure to update the request URL for interactivity and event subscriptions to be your production domain URL**
-  - If Slack environment variables are not set, the app will still run with the Slack bot disabled
-- [Vercel AI Gateway API Key](https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%2Fapi-keys%3Futm_source%3Dai_gateway_landing_page&title=Get+an+API+Key)
+- [Vercel AI Gateway API Key](https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%2Fapi-keys)
 - [Exa API key](https://exa.ai/)
+- [Resend API key](https://resend.com)
+
+### Optional (for Facebook Lead Ads)
+
+- Meta App with Lead Ads webhook configured
+- META_APP_SECRET, META_ACCESS_TOKEN, META_VERIFY_TOKEN
 
 ### Installation
 
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/vercel-labs/lead-agent.git
+git clone https://github.com/masonjames/lead-agent.git
 cd lead-agent
 ```
 
@@ -102,16 +99,19 @@ cp .env.example .env.local
 Configure the following variables:
 
 ```bash
-# Vercel AI Gateway API Key
-AI_GATEWAY_API_KEY
+# Required
+AI_GATEWAY_API_KEY=your-ai-gateway-key
+EXA_API_KEY=your-exa-key
+RESEND_API_KEY=your-resend-key
+REPORT_TO_EMAIL=your-email@example.com
 
-# Slack Bot
-SLACK_BOT_TOKEN
-SLACK_SIGNING_SECRET
-SLACK_CHANNEL_ID
+# Optional - Facebook Lead Ads
+META_APP_SECRET=your-meta-app-secret
+META_ACCESS_TOKEN=your-meta-access-token
+META_VERIFY_TOKEN=your-webhook-verify-token
 
-# Exa API Key
-EXA_API_KEY
+# Optional - Remote browser for PAO scraping
+PLAYWRIGHT_WS_ENDPOINT=wss://your-browser-service
 ```
 
 4. Run the development server:
@@ -128,49 +128,112 @@ pnpm dev
 lead-agent/
 ├── app/
 │   ├── api/
-│   │   ├── submit/       # Form submission endpoint that kicks off workflow
-│   │   └── slack/        # Slack webhook handler (receives slack events)
+│   │   ├── submit/       # Form submission endpoint
+│   │   └── meta/
+│   │       └── webhook/  # Facebook Lead Ads webhook
 │   └── page.tsx          # Home page
 ├── lib/
-│   ├── services.ts       # Core business logic (qualify, research, email)
-│   ├── slack.ts          # Slack integration
-│   └── types.ts          # TypeScript schemas and types
+│   ├── services.ts       # Core business logic
+│   ├── types.ts          # TypeScript schemas and types
+│   ├── scoring.ts        # Lead scoring logic
+│   ├── email/
+│   │   └── resend.ts     # Resend email service
+│   ├── report/
+│   │   └── render.ts     # Email report rendering
+│   ├── meta/
+│   │   ├── signature.ts  # Webhook signature verification
+│   │   ├── graph.ts      # Meta Graph API client
+│   │   └── normalize-leadgen.ts  # Lead data normalization
+│   ├── enrichment/
+│   │   ├── pao.ts        # Property Appraiser enrichment
+│   │   ├── exa.ts        # Exa web research
+│   │   └── demographics.ts  # Demographic data
+│   └── realestate/
+│       ├── property-types.ts
+│       ├── address/      # Address normalization
+│       ├── playwright/   # Browser management
+│       └── pao/          # PAO scraper
 ├── components/
-│   ├── lead-form.tsx     # Main form component
+│   └── lead-form.tsx     # Main form component
 └── workflows/
-    └── inbound/          # Inbound lead workflow
-        ├── index.ts      # Exported workflow function
-        └── steps.ts      # Workflow steps
+    ├── inbound/          # Form submission workflow
+    │   ├── index.ts
+    │   └── steps.ts
+    └── meta/             # Facebook Lead Ads workflow
+        ├── index.ts
+        └── steps.ts
 ```
 
-## Key Features
+## Facebook Lead Ads Setup
 
-### Workflow durable execution with `use workflow`
+### 1. Create a Meta App
 
-This project uses [Workflow DevKit](https://useworkflow.dev) to kick off a workflow that runs the agent, qualification, and other actions.
+1. Go to [Meta for Developers](https://developers.facebook.com)
+2. Create a new app or use an existing one
+3. Add the "Leads Retrieval" product
+4. Get your App Secret from Settings > Basic
 
-### AI-Powered Qualification
+### 2. Configure Webhook
 
-Leads are automatically categorized (QUALIFIED, FOLLOW_UP, SUPPORT, etc.) using the latest OpenAI model via the Vercel AI SDK and `generateObject`. Reasoning is also provided for each qualification decision. Edit the qualification categories by changing the `qualificationCategorySchema` in `lib/types.ts`.
+1. In your Meta App, go to Webhooks
+2. Subscribe to the `leadgen` topic
+3. Set the callback URL to `https://your-domain.com/api/meta/webhook`
+4. Use a custom verify token (set as META_VERIFY_TOKEN)
 
-### AI SDK Agent class
+### 3. Get Access Token
 
-Uses the [AI SDK Agent class](https://ai-sdk.dev/docs/agents/overview) to create an autonomous research agent. Create new tools for the Agent and edit prompts in `lib/services.ts`.
+1. Generate a Page Access Token with `leads_retrieval` permission
+2. Or use a System User token for production
 
-### Human-in-the-Loop Workflow
+### 4. Subscribe to Page Events
 
-Generated emails are sent to Slack with approve/reject buttons, ensuring human oversight before any outbound communication.
+```bash
+curl -X POST "https://graph.facebook.com/v19.0/{page-id}/subscribed_apps" \
+  -H "Authorization: Bearer {access-token}" \
+  -d "subscribed_fields=leadgen"
+```
 
-The Slack message is defined with [Slack's Block Kit](https://docs.slack.dev/block-kit/). It can be edited in `lib/slack.ts`.
+## Lead Scoring
 
-### Extensible Architecture
+Leads are scored 0-100 based on:
 
-- Add new qualification categories in the `qualificationCategorySchema` in `types.ts`
-- Adjust the prompts and configuration for all AI calls in `lib/services.ts`
-- Alter the agent by tuning parameters in `lib/services.ts`
-- Add new service functions if needed in `lib/services.ts`
-- Follow [Vercel Workflow docs](https://useworkflow.dev) to add new steps to the workflow
-- Create new workflows for other qualification flows, outbound outreach, etc.
+| Component | Max Points | Factors |
+|-----------|------------|---------|
+| Contact Quality | 25 | Email, phone, name, address |
+| Property Match | 30 | PAO data found, assessed value, age, size |
+| Financial Signals | 25 | Home value, ZIP income, sale history |
+| Engagement | 20 | Form completeness, local area, public profile |
+
+### Score Tiers
+
+- **HOT** (70-100): High priority, ready to contact
+- **WARM** (50-69): Good lead, needs nurturing
+- **NURTURE** (30-49): Long-term follow-up
+- **COLD** (0-29): Low priority
+
+## Customization
+
+### Extend Enrichment
+
+Add new enrichment sources in `lib/enrichment/`:
+
+```typescript
+export async function enrichFromMySource(params: {...}): Promise<MyEnrichmentResult> {
+  // Your enrichment logic
+}
+```
+
+### Modify Scoring
+
+Edit `lib/scoring.ts` to adjust scoring weights and rules.
+
+### Custom Email Templates
+
+Modify `lib/report/render.ts` to customize email report templates.
+
+### Add Workflow Steps
+
+Follow [Workflow DevKit docs](https://useworkflow.dev) to add new steps.
 
 ## License
 

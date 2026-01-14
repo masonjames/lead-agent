@@ -1,9 +1,9 @@
 import { FormSchema } from '@/lib/types';
 import {
-  stepHumanFeedback,
   stepQualify,
   stepResearch,
-  stepWriteEmail
+  stepWriteEmail,
+  stepSendInboundReportEmail
 } from './steps';
 
 /**
@@ -12,8 +12,7 @@ import {
  * - qualify the lead
  * - if the lead is qualified or follow up:
  *   - write an email for the lead
- *   - get human feedback for the email
- *   - send the email to the human for approval
+ *   - send internal report email automatically
  * - if the lead is not qualified or follow up:
  *   - take other actions here based on other qualification categories
  */
@@ -28,7 +27,10 @@ export const workflowInbound = async (data: FormSchema) => {
     qualification.category === 'FOLLOW_UP'
   ) {
     const email = await stepWriteEmail(research, qualification);
-    await stepHumanFeedback(research, email, qualification);
+
+    // Send internal report email automatically
+    const emailResult = await stepSendInboundReportEmail(data, qualification, research);
+    console.log('[Inbound Workflow] Report email sent:', emailResult.success ? emailResult.messageId : emailResult.error);
   }
 
   // take other actions here based on other qualification categories
