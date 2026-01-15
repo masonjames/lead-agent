@@ -187,12 +187,12 @@ async function findSarasotaPaoDetailUrlOnPage(
     await page.waitForSelector(SELECTORS.addressInput, { timeout: 10000 });
     console.log("[Sarasota PAO] Search form loaded");
 
-    // Build search query - include unit if present
-    let searchQuery = addressParts.street;
-    if (addressParts.unit) {
-      searchQuery = `${addressParts.street} #${addressParts.unit}`;
-    }
+    // Build search query - search for street only, match unit from results
+    // The PAO site works better when we search without the unit and then
+    // match the specific unit from the results list
+    const searchQuery = addressParts.street;
     debug.searchQuery = searchQuery;
+    debug.targetUnit = addressParts.unit;
 
     // Fill address field
     console.log(`[Sarasota PAO] Searching for: ${searchQuery}`);
@@ -273,8 +273,8 @@ async function findSarasotaPaoDetailUrlOnPage(
       }
     }
 
-    // Select best match
-    const best = selectBestResult(rows, address);
+    // Select best match - pass unit for condo matching
+    const best = selectBestResult(rows, address, addressParts.unit);
     debug.bestMatch = best;
 
     if (!best.href) {
@@ -354,7 +354,8 @@ function detectNoResults(html: string): boolean {
 
 function selectBestResult(
   rows: SearchRow[],
-  searchAddress: string
+  searchAddress: string,
+  targetUnit?: string
 ): { href: string | null; parcelId: string | null; confidence: number } {
   if (rows.length === 0) {
     return { href: null, parcelId: null, confidence: 0 };
@@ -364,7 +365,40 @@ function selectBestResult(
     return { href: rows[0].href, parcelId: rows[0].parcelId, confidence: 0.9 };
   }
 
-  // Normalize search address for comparison
+  // If we have a target unit, prioritize results that contain that unit
+  if (targetUnit) {
+    const normalizedUnit = targetUnit.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+    for (const row of rows) {
+      const normalizedRowAddress = row.address.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+      // Check if the row address contains the unit number
+      // Handle formats like: "5692 BENTGRASS DR #14-209" or "5692 BENTGRASS DR UNIT 14-209"
+      if (normalizedRowAddress.includes(normalizedUnit)) {
+        console.log(`[Sarasota PAO] Found unit match: ${row.address} contains ${targetUnit}`);
+        return { href: row.href, parcelId: row.parcelId, confidence: 0.95 };
+      }
+    }
+
+    // If no exact unit match found, try partial matching (just the unit number without building prefix)
+    // e.g., "14-209" might appear as "209" in some cases
+    const unitParts = targetUnit.split("-");
+    if (unitParts.length > 1) {
+      const lastPart = unitParts[unitParts.length - 1].toUpperCase();
+      for (const row of rows) {
+        const normalizedRowAddress = row.address.toUpperCase();
+        // Look for the unit number at the end of the address
+        if (normalizedRowAddress.includes(`#${lastPart}`) ||
+            normalizedRowAddress.includes(`UNIT ${lastPart}`) ||
+            normalizedRowAddress.endsWith(lastPart)) {
+          console.log(`[Sarasota PAO] Found partial unit match: ${row.address} contains ${lastPart}`);
+          return { href: row.href, parcelId: row.parcelId, confidence: 0.8 };
+        }
+      }
+    }
+  }
+
+  // Fallback: Normalize search address for comparison
   const normalizedSearch = searchAddress.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
   let bestMatch = rows[0];

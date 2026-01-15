@@ -319,14 +319,13 @@ async function testAddressSearch(
     // Extract street portion only (no city/state/zip for search)
     let streetPart = testAddress.address.split(",")[0].trim();
 
-    // For Sarasota, parse and reconstruct the search query like the actual scraper does
-    // This handles unit numbers in formats like "Unit #14-209" -> "#14-209"
+    // For Sarasota, search for street only (without unit) and match unit from results
+    // The actual scraper searches for street only and then matches units from the results list
     if (config.name.includes("Sarasota")) {
       const unitMatch = streetPart.match(/\s*(?:#|Unit|Apt|Suite|Ste)[.\s]*#?([\w-]+)\s*$/i);
       if (unitMatch) {
-        const unit = unitMatch[1];
-        const cleanStreet = streetPart.replace(unitMatch[0], "").trim();
-        streetPart = `${cleanStreet} #${unit}`;
+        // Remove unit from search, we'll match it from results
+        streetPart = streetPart.replace(unitMatch[0], "").trim();
       }
     }
 
@@ -396,6 +395,15 @@ async function testAddressSearch(
         const rowCount = dataRows.length;
         debugInfo.resultRowCount = rowCount;
         hasResultsWithData = rowCount > 0;
+      }
+    }
+
+    // Fallback: check for any parcel links on the page (more robust detection)
+    if (!hasResultsWithData && !isDetailPage) {
+      const parcelLinks = await page.$$('a[href*="/parcel/"]');
+      debugInfo.parcelLinkCount = parcelLinks.length;
+      if (parcelLinks.length > 0) {
+        hasResultsWithData = true;
       }
     }
 
