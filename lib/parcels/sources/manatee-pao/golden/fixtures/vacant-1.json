@@ -1,0 +1,35 @@
+{
+  "parcelId": "555555555",
+  "address": "0 VACANT LOT RD",
+  "city": "PALMETTO",
+  "state": "FL",
+  "zipCode": "34221",
+  "owner": "LAND HOLDINGS LLC",
+  "propertyType": "Vacant Land",
+  "assessedValue": 45000,
+  "marketValue": 55000,
+  "basicInfo": {
+    "accountNumber": "555555555",
+    "useCode": "0000",
+    "useDescription": "VACANT RESIDENTIAL",
+    "situsAddress": "0 VACANT LOT RD, PALMETTO FL 34221",
+    "legalDescription": "LOT 15 BLK 3 PALMETTO ACRES",
+    "homesteadExemption": false
+  },
+  "land": {
+    "lotSizeSqFt": 10890,
+    "lotSizeAcres": 0.25,
+    "landUse": "VACANT RESIDENTIAL",
+    "landUseCode": "0000"
+  },
+  "valuations": [
+    {
+      "year": 2024,
+      "just": { "land": 55000, "total": 55000 },
+      "assessed": { "total": 45000 },
+      "taxable": { "total": 45000 },
+      "adValoremTaxes": 810
+    }
+  ],
+  "salesHistory": []
+}

@@ -1,0 +1,115 @@
+{
+  "parcelId": "123456789",
+  "address": "123 MAIN ST",
+  "city": "BRADENTON",
+  "state": "FL",
+  "zipCode": "34208",
+  "owner": "SMITH JOHN & JANE",
+  "propertyType": "Single Family",
+  "yearBuilt": 1985,
+  "bedrooms": 3,
+  "bathrooms": 2,
+  "sqft": 1850,
+  "assessedValue": 285000,
+  "marketValue": 325000,
+  "lastSaleDate": "2018-06-15",
+  "lastSalePrice": 245000,
+  "basicInfo": {
+    "accountNumber": "123456789",
+    "useCode": "0100",
+    "useDescription": "SINGLE FAMILY RESIDENTIAL",
+    "situsAddress": "123 MAIN ST, BRADENTON FL 34208",
+    "subdivision": "PALM GROVE ESTATES",
+    "neighborhood": "1234",
+    "homesteadExemption": true
+  },
+  "building": {
+    "yearBuilt": 1985,
+    "effectiveYearBuilt": 1990,
+    "livingAreaSqFt": 1850,
+    "totalAreaSqFt": 2200,
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "fullBathrooms": 2,
+    "halfBathrooms": 0,
+    "stories": 1,
+    "constructionType": "CBS",
+    "foundation": "SLAB",
+    "roofCover": "SHINGLE",
+    "heating": "CENTRAL",
+    "cooling": "CENTRAL",
+    "garage": {
+      "type": "ATTACHED",
+      "spaces": 2,
+      "areaSqFt": 400
+    },
+    "pool": {
+      "hasPool": true,
+      "type": "INGROUND",
+      "areaSqFt": 450
+    }
+  },
+  "land": {
+    "lotSizeSqFt": 8500,
+    "lotSizeAcres": 0.195,
+    "landUse": "RESIDENTIAL",
+    "landUseCode": "0100"
+  },
+  "valuations": [
+    {
+      "year": 2024,
+      "just": { "land": 85000, "building": 240000, "total": 325000 },
+      "assessed": { "total": 285000 },
+      "taxable": { "total": 235000 },
+      "adValoremTaxes": 4200
+    },
+    {
+      "year": 2023,
+      "just": { "land": 80000, "building": 220000, "total": 300000 },
+      "assessed": { "total": 265000 },
+      "taxable": { "total": 215000 },
+      "adValoremTaxes": 3900
+    },
+    {
+      "year": 2022,
+      "just": { "land": 75000, "building": 200000, "total": 275000 },
+      "assessed": { "total": 245000 },
+      "taxable": { "total": 195000 },
+      "adValoremTaxes": 3600
+    },
+    {
+      "year": 2021,
+      "just": { "land": 65000, "building": 185000, "total": 250000 },
+      "assessed": { "total": 230000 },
+      "taxable": { "total": 180000 },
+      "adValoremTaxes": 3300
+    },
+    {
+      "year": 2020,
+      "just": { "land": 60000, "building": 175000, "total": 235000 },
+      "assessed": { "total": 220000 },
+      "taxable": { "total": 170000 },
+      "adValoremTaxes": 3100
+    }
+  ],
+  "salesHistory": [
+    {
+      "date": "2018-06-15",
+      "price": 245000,
+      "deedType": "WD",
+      "qualified": true,
+      "instrumentNumber": "2018123456",
+      "grantor": "JONES MICHAEL",
+      "grantee": "SMITH JOHN & JANE"
+    },
+    {
+      "date": "2005-03-20",
+      "price": 185000,
+      "deedType": "WD",
+      "qualified": true,
+      "instrumentNumber": "2005098765",
+      "grantor": "BUILDER INC",
+      "grantee": "JONES MICHAEL"
+    }
+  ]
+}

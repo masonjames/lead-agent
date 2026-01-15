@@ -5,9 +5,17 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "parcel:golden": "tsx scripts/parcel-golden.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "drizzle-orm": "^0.41.0",
+    "yaml": "^2.8.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-separator": "^1.1.7",
@@ -32,6 +40,9 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.31.8",
+    "tsx": "^4.20.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

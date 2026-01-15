@@ -1,0 +1,66 @@
+{
+  "parcelId": "987654321",
+  "address": "456 BEACH DR UNIT 302",
+  "city": "BRADENTON BEACH",
+  "state": "FL",
+  "zipCode": "34217",
+  "owner": "DOE ROBERT",
+  "propertyType": "Condominium",
+  "yearBuilt": 2005,
+  "bedrooms": 2,
+  "bathrooms": 2,
+  "sqft": 1200,
+  "assessedValue": 425000,
+  "marketValue": 485000,
+  "lastSaleDate": "2021-09-10",
+  "lastSalePrice": 395000,
+  "basicInfo": {
+    "accountNumber": "987654321",
+    "useCode": "0400",
+    "useDescription": "CONDOMINIUM",
+    "situsAddress": "456 BEACH DR UNIT 302, BRADENTON BEACH FL 34217",
+    "subdivision": "GULF SHORES CONDOS",
+    "homesteadExemption": false
+  },
+  "building": {
+    "yearBuilt": 2005,
+    "effectiveYearBuilt": 2005,
+    "livingAreaSqFt": 1200,
+    "totalAreaSqFt": 1200,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "fullBathrooms": 2,
+    "halfBathrooms": 0,
+    "stories": 1,
+    "constructionType": "CBS",
+    "heating": "CENTRAL",
+    "cooling": "CENTRAL"
+  },
+  "valuations": [
+    {
+      "year": 2024,
+      "just": { "land": 150000, "building": 335000, "total": 485000 },
+      "assessed": { "total": 425000 },
+      "taxable": { "total": 425000 },
+      "adValoremTaxes": 7650
+    },
+    {
+      "year": 2023,
+      "just": { "land": 140000, "building": 310000, "total": 450000 },
+      "assessed": { "total": 395000 },
+      "taxable": { "total": 395000 },
+      "adValoremTaxes": 7100
+    }
+  ],
+  "salesHistory": [
+    {
+      "date": "2021-09-10",
+      "price": 395000,
+      "deedType": "WD",
+      "qualified": true,
+      "instrumentNumber": "2021567890",
+      "grantor": "BEACH INVESTMENTS LLC",
+      "grantee": "DOE ROBERT"
+    }
+  ]
+}
