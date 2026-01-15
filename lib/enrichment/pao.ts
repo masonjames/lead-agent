@@ -226,6 +226,8 @@ export async function enrichPaoByAddress(params: {
     `[PAO Enrichment] Starting enrichment for: "${address}" (detected: ${detectedSource || "unknown, trying both"})`
   );
 
+  let lastDebug: Record<string, unknown> | undefined;
+
   // Try each source until we find a match
   for (const source of sourcesToTry) {
     const scraper = SCRAPERS[source];
@@ -260,6 +262,11 @@ export async function enrichPaoByAddress(params: {
       }
 
       console.log(`[PAO Enrichment] No property found in ${scraper.name}`);
+      if (result.debug) {
+        lastDebug = { ...result.debug, source };
+      } else {
+        lastDebug = { source };
+      }
     } catch (error) {
       // Log error but continue to next source
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -301,7 +308,7 @@ export async function enrichPaoByAddress(params: {
   return {
     status: "FAILED",
     error: `No property found in ${triedSources} for address: "${address}"`,
-    debug: { sourcesChecked: sourcesToTry },
+    debug: { sourcesChecked: sourcesToTry, lastDebug },
     provenance: {
       source: sourcesToTry[0],
       method: "playwright",

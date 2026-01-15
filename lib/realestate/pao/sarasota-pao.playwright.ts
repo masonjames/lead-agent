@@ -66,6 +66,7 @@ const SELECTORS = {
 export interface SarasotaPaoPlaywrightOptions {
   timeoutMs?: number;
   navTimeoutMs?: number;
+  searchMaxAttempts?: number;
   debug?: boolean;
 }
 
@@ -79,10 +80,55 @@ interface AddressParts {
   street: string;
   streetNo?: string;
   streetName?: string;
+  streetNameRaw?: string;
   unit?: string;
+  unitRaw?: string;
+  unitVariants?: string[];
+  streetNoUnitRaw: string;
+  streetNoUnitUsps?: string;
   city?: string;
   state?: string;
   zipCode?: string;
+}
+
+function normalizeForCompare(input: string): string {
+  return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripUnitDesignator(value: string): string {
+  return value.replace(/^(?:#|UNIT|APT|APARTMENT|SUITE|STE|BLDG|BUILDING)\s*/i, "").trim();
+}
+
+function buildUnitVariants(unit?: string): string[] {
+  if (!unit) return [];
+
+  const raw = unit.trim();
+  const cleaned = stripUnitDesignator(raw);
+  const variants = new Set<string>();
+
+  const addVariant = (value?: string) => {
+    if (!value) return;
+    const normalized = normalizeForCompare(value);
+    if (normalized) {
+      variants.add(normalized);
+    }
+  };
+
+  addVariant(raw);
+  addVariant(cleaned);
+  addVariant(cleaned.replace(/[\s#]+/g, ""));
+  addVariant(cleaned.replace(/[^A-Z0-9-]/gi, ""));
+
+  if (cleaned.includes("-")) {
+    const lastPart = cleaned.split("-").pop();
+    addVariant(lastPart);
+  }
+
+  return Array.from(variants);
 }
 
 interface SearchRow {
@@ -90,6 +136,7 @@ interface SearchRow {
   address: string;
   owner?: string;
   href: string;
+  rawText?: string;
 }
 
 // ============================================================================
@@ -104,6 +151,7 @@ function parseAddressForSarasota(address: string): AddressParts {
   let state: string | undefined;
   let zipCode: string | undefined;
   let unit: string | undefined;
+  let unitRaw: string | undefined;
 
   // Extract unit from street (handles #13, Unit 13, Apt 13, Unit #14-209, etc.)
   // Pattern handles:
@@ -111,9 +159,12 @@ function parseAddressForSarasota(address: string): AddressParts {
   // - With hash: Unit #14, Apt #5
   // - With hyphen: #14-209, Unit 14-209, Unit #14-209 (condo building-unit format)
   // - Alphanumeric: Unit A, Apt 201B, #A-101
-  const unitMatch = street.match(/\s*(?:#|Unit|Apt|Suite|Ste)[.\s]*#?([\w-]+)\s*$/i);
+  const unitMatch = street.match(
+    /\s*(?:#|Unit|Apt|Apartment|Suite|Ste|Bldg|Building)[.\s]*#?([\w-]+)\s*$/i
+  );
   if (unitMatch) {
     unit = unitMatch[1];
+    unitRaw = unitMatch[1];
     street = street.replace(unitMatch[0], "").trim();
   }
 
@@ -140,15 +191,24 @@ function parseAddressForSarasota(address: string): AddressParts {
   }
 
   // Extract street number and name
-  const streetMatch = street.match(/^(\d+)\s+(.+)$/);
+  const streetNoUnitRaw = street.trim();
+  const streetMatch = streetNoUnitRaw.match(/^(\d+)\s+(.+)$/);
   const streetNo = streetMatch?.[1];
-  const streetName = streetMatch ? normalizeStreetForUsps(streetMatch[2]) : normalizeStreetForUsps(street);
+  const streetNameRaw = streetMatch ? streetMatch[2] : streetNoUnitRaw;
+  const streetName = normalizeStreetForUsps(streetNameRaw);
+  const streetNoUnitUsps = normalizeStreetForUsps(streetNoUnitRaw);
+  const unitVariants = buildUnitVariants(unitRaw || unit);
 
   return {
-    street,
+    street: streetNoUnitRaw,
     streetNo,
     streetName,
+    streetNameRaw,
     unit,
+    unitRaw,
+    unitVariants,
+    streetNoUnitRaw,
+    streetNoUnitUsps,
     city,
     state: state || "FL",
     zipCode,
@@ -158,6 +218,111 @@ function parseAddressForSarasota(address: string): AddressParts {
 // ============================================================================
 // Search Functions
 // ============================================================================
+
+type SarasotaResultsSignal =
+  | { kind: "DETAIL_REDIRECT"; url: string }
+  | { kind: "HAS_RESULTS"; parcelLinkCount: number }
+  | { kind: "NO_RESULTS"; reason: string }
+  | { kind: "TIMEOUT"; reason: string };
+
+interface SarasotaSearchAttempt {
+  query: string;
+  kind: "PRIMARY" | "NO_NUMBER" | "WITH_UNIT" | "UNIT_LASTPART" | "USPS";
+}
+
+interface ParseSearchResultsResult {
+  rows: SearchRow[];
+  meta: {
+    strategy: "TABLE" | "LINK_SCAN";
+    tableSelectorUsed?: string;
+    rowCountRaw?: number;
+    parcelLinkCount?: number;
+  };
+}
+
+function buildSarasotaSearchAttempts(parts: AddressParts, maxAttempts?: number): SarasotaSearchAttempt[] {
+  const attempts: SarasotaSearchAttempt[] = [];
+  const seen = new Set<string>();
+
+  const addAttempt = (query: string | undefined, kind: SarasotaSearchAttempt["kind"]) => {
+    const trimmed = (query || "").trim();
+    if (!trimmed) return;
+    const key = trimmed.toUpperCase();
+    if (seen.has(key)) return;
+    attempts.push({ query: trimmed, kind });
+    seen.add(key);
+  };
+
+  addAttempt(parts.streetNoUnitRaw, "PRIMARY");
+  addAttempt(parts.streetNameRaw, "NO_NUMBER");
+
+  if (parts.unit) {
+    const unitForQuery = stripUnitDesignator(parts.unit);
+    addAttempt(`${parts.streetNoUnitRaw} ${unitForQuery}`, "WITH_UNIT");
+    if (unitForQuery.includes("-")) {
+      addAttempt(`${parts.streetNoUnitRaw} ${unitForQuery.split("-").pop()}`, "UNIT_LASTPART");
+    }
+  }
+
+  if (parts.streetNoUnitUsps && parts.streetNoUnitUsps !== parts.streetNoUnitRaw) {
+    addAttempt(parts.streetNoUnitUsps, "USPS");
+  }
+
+  return typeof maxAttempts === "number" ? attempts.slice(0, Math.max(maxAttempts, 1)) : attempts;
+}
+
+async function waitForSarasotaResults(page: Page, timeoutMs: number): Promise<SarasotaResultsSignal> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const currentUrl = page.url();
+    if (currentUrl.includes("/parcel/")) {
+      return { kind: "DETAIL_REDIRECT", url: currentUrl };
+    }
+
+    try {
+      const state = await page.evaluate(() => {
+        const parcelLinks = document.querySelectorAll('a[href*="/parcel"]').length;
+        const rows = document.querySelectorAll("table tbody tr").length;
+        const noResultsElement = document.querySelector(
+          ".alert-warning, .alert-info, .no-results, .dataTables_empty"
+        );
+        const text = document.body?.innerText?.toLowerCase() || "";
+        const noResultsText =
+          text.includes("no results") ||
+          text.includes("no records found") ||
+          text.includes("no properties found") ||
+          text.includes("no matching records") ||
+          text.includes("0 results") ||
+          text.includes("showing 0 to 0 of 0 entries");
+
+        return {
+          parcelLinks,
+          rows,
+          noResultsElement: Boolean(noResultsElement),
+          noResultsText,
+        };
+      });
+
+      if (state.parcelLinks > 0 || state.rows > 0) {
+        return { kind: "HAS_RESULTS", parcelLinkCount: state.parcelLinks };
+      }
+
+      if (state.noResultsElement || state.noResultsText) {
+        return {
+          kind: "NO_RESULTS",
+          reason: state.noResultsElement ? "SELECTOR_MATCH" : "TEXT_MATCH",
+        };
+      }
+    } catch {
+      // Ignore transient evaluate errors during navigation.
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  return { kind: "TIMEOUT", reason: "timeout" };
+}
 
 async function findSarasotaPaoDetailUrlOnPage(
   page: Page,
@@ -187,110 +352,171 @@ async function findSarasotaPaoDetailUrlOnPage(
     await page.waitForSelector(SELECTORS.addressInput, { timeout: 10000 });
     console.log("[Sarasota PAO] Search form loaded");
 
-    // Build search query - search for street only, match unit from results
-    // The PAO site works better when we search without the unit and then
-    // match the specific unit from the results list
-    const searchQuery = addressParts.street;
-    debug.searchQuery = searchQuery;
     debug.targetUnit = addressParts.unit;
+    debug.searchAttempts = [];
 
-    // Fill address field
-    console.log(`[Sarasota PAO] Searching for: ${searchQuery}`);
-    await page.fill(SELECTORS.addressInput, searchQuery);
+    const searchAttempts = buildSarasotaSearchAttempts(addressParts, options?.searchMaxAttempts);
+    const navTimeoutMs = options?.navTimeoutMs || 30000;
 
-    // Wait a moment for autocomplete to settle and dismiss any popups
-    await page.waitForTimeout(800);
-    await page.keyboard.press("Escape"); // Dismiss autocomplete dropdown if present
-    await page.waitForTimeout(200);
+    let sawNoResults = false;
+    let sawParseFailure = false;
+    let sawNoMatch = false;
+    let sawTimeout = false;
 
-    // Try to find and click the submit button using multiple selectors
-    let buttonClicked = false;
-    for (const selector of SELECTORS.searchButtonSelectors) {
-      try {
-        const button = await page.$(selector);
-        if (button) {
-          const isVisible = await button.isVisible();
-          if (isVisible) {
-            console.log(`[Sarasota PAO] Found submit button with selector: ${selector}`);
-            debug.usedButtonSelector = selector;
-            await button.click();
-            buttonClicked = true;
-            break;
+    for (let index = 0; index < searchAttempts.length; index += 1) {
+      const attempt = searchAttempts[index];
+      console.log(`[Sarasota PAO] Searching for: ${attempt.query} (${attempt.kind})`);
+
+      const attemptDebug: Record<string, unknown> = {
+        attempt: index + 1,
+        query: attempt.query,
+        kind: attempt.kind,
+      };
+
+      // Fill address field
+      await page.fill(SELECTORS.addressInput, attempt.query);
+
+      // Wait a moment for autocomplete to settle and dismiss any popups
+      await page.waitForTimeout(800);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(200);
+
+      // Try to find and click the submit button using multiple selectors
+      let buttonClicked = false;
+      for (const selector of SELECTORS.searchButtonSelectors) {
+        try {
+          const button = await page.$(selector);
+          if (button) {
+            const isVisible = await button.isVisible();
+            if (isVisible) {
+              console.log(`[Sarasota PAO] Found submit button with selector: ${selector}`);
+              attemptDebug.usedButtonSelector = selector;
+              await button.click();
+              buttonClicked = true;
+              break;
+            }
           }
+        } catch {
+          // Continue to next selector
         }
-      } catch {
-        // Continue to next selector
       }
-    }
 
-    // If no button found, try submitting with Enter key
-    if (!buttonClicked) {
-      console.log("[Sarasota PAO] No submit button found, trying Enter key...");
-      debug.submittedViaEnter = true;
-      await page.press(SELECTORS.addressInput, "Enter");
-    }
+      if (!buttonClicked) {
+        console.log("[Sarasota PAO] No submit button found, trying Enter key...");
+        attemptDebug.submittedVia = "ENTER";
+        await page.press(SELECTORS.addressInput, "Enter");
+      } else {
+        attemptDebug.submittedVia = "CLICK";
+      }
 
-    // Wait for navigation/results
-    console.log("[Sarasota PAO] Waiting for results...");
-    await page.waitForLoadState("domcontentloaded", { timeout: options?.navTimeoutMs || 30000 });
-    await page.waitForTimeout(1500); // Additional wait for dynamic content
+      console.log("[Sarasota PAO] Waiting for results...");
+      const signal = await waitForSarasotaResults(page, navTimeoutMs);
+      attemptDebug.signal = signal.kind;
+      attemptDebug.resultUrl = page.url();
+      if (signal.kind === "NO_RESULTS") {
+        attemptDebug.noResultsReason = signal.reason;
+      }
 
-    // Check for blocking
-    const content = await page.content();
-    const blockCheck = detectBlocking(content);
-    if (blockCheck.blocked) {
-      throw new PlaywrightError(
-        `Sarasota PAO site blocked: ${blockCheck.reason}`,
-        "BLOCKED"
-      );
-    }
+      if (signal.kind === "TIMEOUT") {
+        sawTimeout = true;
+      }
 
-    // Check if we're already on a detail page (single result redirect)
-    const currentUrl = page.url();
-    if (currentUrl.includes("/parcel/details/") || currentUrl.includes("/parcel/")) {
-      const parcelMatch = currentUrl.match(/\/parcel(?:\/details)?\/(\d+)/);
-      const parcelId = parcelMatch?.[1] || null;
-      debug.directRedirect = true;
-      debug.parcelId = parcelId;
+      if (signal.kind === "DETAIL_REDIRECT") {
+        const parcelMatch = signal.url.match(/\/parcel(?:\/details)?\/(\d+)/);
+        const parcelId = parcelMatch?.[1] || null;
+        debug.directRedirect = true;
+        debug.parcelId = parcelId;
+        (debug.searchAttempts as Array<Record<string, unknown>>).push(attemptDebug);
+        debug.searchOutcome = "FOUND";
+        return {
+          detailUrl: signal.url,
+          parcelId,
+          debug,
+        };
+      }
+
+      const content = await page.content();
+      const blockCheck = detectBlocking(content);
+      if (blockCheck.blocked) {
+        throw new PlaywrightError(
+          `Sarasota PAO site blocked: ${blockCheck.reason}`,
+          "BLOCKED"
+        );
+      }
+
+      const parseResult = parseSearchResults(content);
+      const noResults = detectNoResults(content);
+
+      attemptDebug.parse = {
+        strategy: parseResult.meta.strategy,
+        parsedRowCount: parseResult.rows.length,
+        tableSelectorUsed: parseResult.meta.tableSelectorUsed,
+      };
+
+      attemptDebug.dom = {
+        parcelLinkCount: parseResult.meta.parcelLinkCount ?? 0,
+        resultsRowCount: parseResult.rows.length,
+        hasResultsTable: Boolean(parseResult.meta.tableSelectorUsed),
+        hasNoResultsAlert: noResults.ok,
+      };
+
+      attemptDebug.sample = {
+        firstParcelHrefs: parseResult.rows.slice(0, 3).map((row) => row.href),
+        firstRowAddresses: parseResult.rows.slice(0, 3).map((row) => row.address),
+      };
+
+      if (parseResult.rows.length === 0) {
+        if (noResults.ok) {
+          sawNoResults = true;
+          attemptDebug.noResultsReason = attemptDebug.noResultsReason || noResults.reason;
+          (debug.searchAttempts as Array<Record<string, unknown>>).push(attemptDebug);
+          continue;
+        }
+
+        if (parseResult.meta.parcelLinkCount && parseResult.meta.parcelLinkCount > 0) {
+          sawParseFailure = true;
+        }
+
+        (debug.searchAttempts as Array<Record<string, unknown>>).push(attemptDebug);
+        continue;
+      }
+
+      const best = selectBestResult(parseResult.rows, addressParts);
+      attemptDebug.selection = best;
+      debug.bestMatch = best;
+
+      if (!best.href) {
+        sawNoMatch = true;
+        (debug.searchAttempts as Array<Record<string, unknown>>).push(attemptDebug);
+        continue;
+      }
+
+      const detailUrl = best.href.startsWith("http")
+        ? best.href
+        : `${PAO_BASE_URL}${best.href}`;
+
+      (debug.searchAttempts as Array<Record<string, unknown>>).push(attemptDebug);
+      debug.searchOutcome = "FOUND";
       return {
-        detailUrl: currentUrl,
-        parcelId,
+        detailUrl,
+        parcelId: best.parcelId || null,
         debug,
       };
     }
 
-    // Parse search results
-    const resultsHtml = await page.content();
-    const rows = parseSearchResults(resultsHtml);
-    debug.resultCount = rows.length;
-
-    if (rows.length === 0) {
-      // Check for no results message
-      const noResults = detectNoResults(resultsHtml);
-      if (noResults) {
-        debug.noResults = true;
-        return { detailUrl: null, parcelId: null, debug };
-      }
+    if (sawNoMatch) {
+      debug.searchOutcome = "NO_MATCH";
+    } else if (sawParseFailure) {
+      debug.searchOutcome = "PARSE_FAILED";
+    } else if (sawNoResults) {
+      debug.searchOutcome = "NO_RESULTS_CONFIRMED";
+    } else if (sawTimeout) {
+      debug.searchOutcome = "TIMEOUT";
+    } else {
+      debug.searchOutcome = "UNKNOWN";
     }
 
-    // Select best match - pass unit for condo matching
-    const best = selectBestResult(rows, address, addressParts.unit);
-    debug.bestMatch = best;
-
-    if (!best.href) {
-      return { detailUrl: null, parcelId: null, debug };
-    }
-
-    // Build full detail URL
-    const detailUrl = best.href.startsWith("http")
-      ? best.href
-      : `${PAO_BASE_URL}${best.href}`;
-
-    return {
-      detailUrl,
-      parcelId: best.parcelId || null,
-      debug,
-    };
+    return { detailUrl: null, parcelId: null, debug };
   } catch (error) {
     debug.error = error instanceof Error ? error.message : String(error);
 
@@ -306,129 +532,223 @@ async function findSarasotaPaoDetailUrlOnPage(
   }
 }
 
-function parseSearchResults(html: string): SearchRow[] {
+function parseSearchResults(html: string): ParseSearchResultsResult {
   const $ = cheerio.load(html);
   const rows: SearchRow[] = [];
+  const parcelLinkCount = $("a[href*='/parcel']").length;
+  const tableSelectors = [
+    "table.table tbody tr",
+    ".search-results table tbody tr",
+    "#searchResults tbody tr",
+    "table tbody tr",
+  ];
 
-  // Look for results table rows
-  $("table tbody tr").each((_, row) => {
-    const $row = $(row);
-    const cells = $row.find("td");
+  let tableSelectorUsed: string | undefined;
 
-    if (cells.length >= 2) {
-      // Try to find a link to the detail page
+  for (const selector of tableSelectors) {
+    $(selector).each((_, row) => {
+      const $row = $(row);
+      const cells = $row.find("td");
+      const rowText = $row.text().replace(/\s+/g, " ").trim();
+
+      if ($row.find("th").length > 0 || cells.length === 0) return;
+      if (/no matching|no results|no records/i.test(rowText)) return;
+
       const link = $row.find("a[href*='/parcel']").first();
       const href = link.attr("href") || "";
 
-      // Extract parcel ID from href or from cell content
       let parcelId = "";
       const parcelMatch = href.match(/\/parcel(?:\/details)?\/(\d+)/);
       if (parcelMatch) {
         parcelId = parcelMatch[1];
-      } else {
-        // Try first cell
+      } else if (cells.length > 0) {
         parcelId = cells.eq(0).text().trim().replace(/\D/g, "");
       }
 
-      const address = cells.eq(1).text().trim() || link.text().trim();
+      const address =
+        cells.eq(1).text().trim() ||
+        link.text().trim() ||
+        rowText;
       const owner = cells.length >= 3 ? cells.eq(2).text().trim() : undefined;
 
-      if (href && (parcelId || address)) {
-        rows.push({ parcelId, address, owner, href });
+      if ((href || parcelId) && address) {
+        rows.push({ parcelId, address, owner, href, rawText: rowText });
       }
+    });
+
+    if (rows.length > 0) {
+      tableSelectorUsed = selector;
+      break;
     }
+  }
+
+  if (rows.length > 0) {
+    return {
+      rows,
+      meta: {
+        strategy: "TABLE",
+        tableSelectorUsed,
+        parcelLinkCount,
+        rowCountRaw: rows.length,
+      },
+    };
+  }
+
+  const parcelLinks = $("a[href*='/parcel']");
+  const seen = new Set<string>();
+
+  parcelLinks.each((_, link) => {
+    const $link = $(link);
+    const href = $link.attr("href") || "";
+    if (!href || seen.has(href)) return;
+    seen.add(href);
+
+    const container = $link.closest("tr, li, .search-result, .result, .card, .panel");
+    const rawText = (container.length ? container.text() : $link.parent().text())
+      .replace(/\s+/g, " ")
+      .trim();
+    const address = $link.text().trim() || rawText;
+    const parcelMatch = href.match(/\/parcel(?:\/details)?\/(\d+)/);
+    const parcelId = parcelMatch ? parcelMatch[1] : "";
+
+    rows.push({ parcelId, address, href, rawText });
   });
 
-  return rows;
+  return {
+    rows,
+    meta: {
+      strategy: "LINK_SCAN",
+      parcelLinkCount,
+      rowCountRaw: rows.length,
+    },
+  };
 }
 
-function detectNoResults(html: string): boolean {
+function detectNoResults(html: string): { ok: boolean; reason?: string } {
   const lowerHtml = html.toLowerCase();
-  return (
-    lowerHtml.includes("no results") ||
-    lowerHtml.includes("no records found") ||
-    lowerHtml.includes("no properties found") ||
-    lowerHtml.includes("0 results")
-  );
+  const $ = cheerio.load(html);
+
+  if ($(".dataTables_empty").length > 0) {
+    return { ok: true, reason: "DATATABLES_EMPTY" };
+  }
+
+  const patterns = [
+    "no results",
+    "no records found",
+    "no properties found",
+    "no matching records",
+    "0 results",
+    "showing 0 to 0 of 0 entries",
+  ];
+
+  for (const pattern of patterns) {
+    if (lowerHtml.includes(pattern)) {
+      return { ok: true, reason: `TEXT_MATCH:${pattern}` };
+    }
+  }
+
+  const alertText = $(".alert-warning, .alert-info, .no-results").text().toLowerCase();
+  if (alertText && patterns.some((pattern) => alertText.includes(pattern))) {
+    return { ok: true, reason: "ALERT_TEXT" };
+  }
+
+  return { ok: false };
 }
 
 function selectBestResult(
   rows: SearchRow[],
-  searchAddress: string,
-  targetUnit?: string
-): { href: string | null; parcelId: string | null; confidence: number } {
+  target: AddressParts
+): { href: string | null; parcelId: string | null; confidence: number; reason: string; matchedOn?: { streetNo: boolean; streetName: boolean; unit: boolean } } {
   if (rows.length === 0) {
-    return { href: null, parcelId: null, confidence: 0 };
+    return { href: null, parcelId: null, confidence: 0, reason: "NO_ROWS" };
   }
 
   if (rows.length === 1) {
-    return { href: rows[0].href, parcelId: rows[0].parcelId, confidence: 0.9 };
+    const unitVariants = target.unitVariants ?? buildUnitVariants(target.unit);
+    const rowText = rows[0].address || rows[0].rawText || "";
+    const rowNormalized = normalizeForCompare(rowText);
+    const unitMatch = unitVariants.length === 0 || unitVariants.some((unit) => rowNormalized.includes(unit));
+
+    return {
+      href: rows[0].href,
+      parcelId: rows[0].parcelId,
+      confidence: unitMatch ? 0.9 : 0.75,
+      reason: unitMatch ? "SINGLE_ROW_MATCH" : "SINGLE_ROW_NO_UNIT",
+      matchedOn: {
+        streetNo: Boolean(target.streetNo),
+        streetName: Boolean(target.streetNameRaw || target.streetName),
+        unit: unitMatch,
+      },
+    };
   }
 
-  // If we have a target unit, prioritize results that contain that unit
-  if (targetUnit) {
-    const normalizedUnit = targetUnit.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const streetNo = target.streetNo ? target.streetNo.trim() : "";
+  const streetNameSource = target.streetNameRaw || target.streetName || "";
+  const streetTokens = streetNameSource
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2);
+  const unitVariants = target.unitVariants ?? buildUnitVariants(target.unit);
+  const unitRequired = Boolean(target.unit);
 
-    for (const row of rows) {
-      const normalizedRowAddress = row.address.toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-      // Check if the row address contains the unit number
-      // Handle formats like: "5692 BENTGRASS DR #14-209" or "5692 BENTGRASS DR UNIT 14-209"
-      if (normalizedRowAddress.includes(normalizedUnit)) {
-        console.log(`[Sarasota PAO] Found unit match: ${row.address} contains ${targetUnit}`);
-        return { href: row.href, parcelId: row.parcelId, confidence: 0.95 };
-      }
-    }
-
-    // If no exact unit match found, try partial matching (just the unit number without building prefix)
-    // e.g., "14-209" might appear as "209" in some cases
-    const unitParts = targetUnit.split("-");
-    if (unitParts.length > 1) {
-      const lastPart = unitParts[unitParts.length - 1].toUpperCase();
-      for (const row of rows) {
-        const normalizedRowAddress = row.address.toUpperCase();
-        // Look for the unit number at the end of the address
-        if (normalizedRowAddress.includes(`#${lastPart}`) ||
-            normalizedRowAddress.includes(`UNIT ${lastPart}`) ||
-            normalizedRowAddress.endsWith(lastPart)) {
-          console.log(`[Sarasota PAO] Found partial unit match: ${row.address} contains ${lastPart}`);
-          return { href: row.href, parcelId: row.parcelId, confidence: 0.8 };
-        }
-      }
-    }
-  }
-
-  // Fallback: Normalize search address for comparison
-  const normalizedSearch = searchAddress.toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-  let bestMatch = rows[0];
+  let bestMatch: SearchRow | null = null;
   let bestScore = 0;
+  let bestMatchedOn = { streetNo: false, streetName: false, unit: false };
 
   for (const row of rows) {
-    const normalizedRow = row.address.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const rowText = [row.address, row.owner, row.rawText].filter(Boolean).join(" ");
+    const rowTextLower = rowText.toLowerCase();
+    const rowNormalized = normalizeForCompare(rowText);
 
-    // Simple scoring: count matching characters
+    const streetNoMatch = streetNo
+      ? new RegExp(`\\b${escapeRegExp(streetNo)}\\b`).test(rowTextLower)
+      : true;
+    const streetNameMatch =
+      streetTokens.length === 0 || streetTokens.some((token) => rowTextLower.includes(token));
+    const unitMatch =
+      unitVariants.length === 0 || unitVariants.some((variant) => rowNormalized.includes(variant));
+
+    if (unitRequired && !unitMatch && rows.length > 1) {
+      continue;
+    }
+
+    if (streetNo && !streetNoMatch) {
+      continue;
+    }
+
+    if (streetTokens.length > 0 && !streetNameMatch) {
+      continue;
+    }
+
     let score = 0;
-    const minLen = Math.min(normalizedSearch.length, normalizedRow.length);
-    for (let i = 0; i < minLen; i++) {
-      if (normalizedSearch[i] === normalizedRow[i]) {
-        score++;
-      }
-    }
-
-    // Bonus for exact length match
-    if (normalizedSearch.length === normalizedRow.length) {
-      score += 10;
-    }
+    if (streetNoMatch) score += 0.45;
+    if (streetNameMatch) score += 0.35;
+    if (unitMatch) score += 0.2;
 
     if (score > bestScore) {
       bestScore = score;
       bestMatch = row;
+      bestMatchedOn = { streetNo: streetNoMatch, streetName: streetNameMatch, unit: unitMatch };
     }
   }
 
-  const confidence = Math.min(bestScore / normalizedSearch.length, 1);
-  return { href: bestMatch.href, parcelId: bestMatch.parcelId, confidence };
+  if (!bestMatch) {
+    return {
+      href: null,
+      parcelId: null,
+      confidence: 0,
+      reason: unitRequired ? "NO_UNIT_MATCH" : "NO_STREET_MATCH",
+    };
+  }
+
+  return {
+    href: bestMatch.href,
+    parcelId: bestMatch.parcelId,
+    confidence: Math.min(bestScore, 1),
+    reason: "BEST_MATCH",
+    matchedOn: bestMatchedOn,
+  };
 }
 
 // ============================================================================

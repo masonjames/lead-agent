@@ -88,6 +88,10 @@ export class SarasotaPaoAdapter implements ParcelSourceAdapter {
       });
 
       const durationMs = ctx.now() - stepStart;
+      const attemptCount = Array.isArray(result.debug?.searchAttempts)
+        ? result.debug?.searchAttempts.length
+        : undefined;
+      const searchOutcome = (result.debug as Record<string, unknown> | undefined)?.searchOutcome;
 
       if (!result.detailUrl) {
         ctx.observer?.onStepEnd({
@@ -95,7 +99,7 @@ export class SarasotaPaoAdapter implements ParcelSourceAdapter {
           step: "resolve",
           ok: false,
           durationMs,
-          data: { found: false },
+          data: { found: false, attemptCount, searchOutcome },
         });
         return {
           found: false,
@@ -108,7 +112,7 @@ export class SarasotaPaoAdapter implements ParcelSourceAdapter {
         step: "resolve",
         ok: true,
         durationMs,
-        data: { detailUrl: result.detailUrl },
+        data: { detailUrl: result.detailUrl, attemptCount, searchOutcome },
       });
 
       // Store the scraped data in context for later phases

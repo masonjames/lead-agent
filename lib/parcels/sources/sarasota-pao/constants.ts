@@ -35,4 +35,4 @@ export const SARASOTA_PAO_CONFIG: SourceConfig = {
   },
 };
 
-export const PARSER_VERSION = "sarasota-pao-v1.0.0";
+export const PARSER_VERSION = "sarasota-pao-v1.1.0";

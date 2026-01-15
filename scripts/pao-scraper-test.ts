@@ -98,6 +98,11 @@ const COUNTY_CONFIGS: Record<string, CountyTestConfig> = {
         expectFound: true,
       },
       {
+        address: "5682 Bentgrass Dr #12-103, Sarasota, FL 34235",
+        description: "Condo unit (building-unit format, second building)",
+        expectFound: true,
+      },
+      {
         address: "100 FAKE NONEXISTENT ST, SARASOTA, FL 34230",
         description: "Non-existent address",
         expectFound: false,
