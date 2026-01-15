@@ -1,11 +1,14 @@
 /**
  * Exa Search Result Matching
- * 
+ *
  * Scores how well a search result matches the lead's identity.
  * Used to filter out irrelevant results and rank relevant ones.
  */
 
 import type { ExaSourceCategory } from "./categorize";
+import type { GeoContext } from "./geo";
+import type { MatchSignals } from "./types";
+import { extractStateAbbreviations } from "./geo";
 
 export interface LeadIdentity {
   name?: string;
@@ -21,13 +24,15 @@ export interface LeadIdentity {
 }
 
 export interface MatchResult {
-  score: number;           // 0 to 1
-  reasons: string[];       // Why it matched
+  score: number; // 0 to 1
+  reasons: string[]; // Why it matched
+  signals: MatchSignals; // Structured signals for disambiguation
   extracted: {
     emails: string[];
     phones: string[];
     locations: string[];
     personNameMentions: string[];
+    stateAbbrevs?: string[]; // Detected state abbreviations
   };
 }
 
@@ -135,6 +140,7 @@ function extractNameMentions(text: string, leadName: string): string[] {
  */
 export function scoreMatchToLead(params: {
   lead: LeadIdentity;
+  geo?: GeoContext;
   doc: {
     url: string;
     title?: string;
@@ -143,47 +149,81 @@ export function scoreMatchToLead(params: {
     domain: string;
   };
 }): MatchResult {
-  const { lead, doc } = params;
+  const { lead, geo, doc } = params;
   const reasons: string[] = [];
   let score = 0;
-  
+
+  // Initialize signals for disambiguation
+  const signals: MatchSignals = {
+    hasEmailMatch: false,
+    hasPhoneMatch: false,
+    hasCompanyMatchTitle: false,
+    hasCompanyMatchText: false,
+    hasCityMatch: false,
+    hasStateMatch: false,
+    hasZipMatch: false,
+    conflictingStates: [],
+  };
+
   // Combine title and text for searching
   const combinedText = [doc.title || "", doc.text || ""].join(" ");
   const lowerText = combinedText.toLowerCase();
   const lowerTitle = (doc.title || "").toLowerCase();
-  
+
   // Extract data from the document
   const extractedEmails = extractEmails(combinedText);
   const extractedPhones = extractPhones(combinedText);
-  
-  // Build location tokens to look for
+  const extractedStateAbbrevs = extractStateAbbreviations(combinedText);
+
+  // Build location tokens from GeoContext or fallback to lead data
   const locationTokens: string[] = [];
-  if (lead.city) locationTokens.push(lead.city);
-  if (lead.state) locationTokens.push(lead.state);
-  if (lead.zipCode) locationTokens.push(lead.zipCode);
-  // Add Manatee County area locations
-  locationTokens.push("Bradenton", "Manatee", "Palmetto", "Lakewood Ranch", "FL", "Florida");
-  
+  if (geo?.tokens) {
+    locationTokens.push(...geo.tokens);
+  } else {
+    // Fallback to manual token building
+    if (lead.city) locationTokens.push(lead.city);
+    if (lead.state) locationTokens.push(lead.state);
+    if (lead.zipCode) locationTokens.push(lead.zipCode);
+    // Add Manatee/Sarasota County area locations as fallback
+    locationTokens.push(
+      "Bradenton",
+      "Manatee",
+      "Palmetto",
+      "Lakewood Ranch",
+      "Sarasota",
+      "Venice",
+      "FL",
+      "Florida"
+    );
+  }
+
   const extractedLocations = extractLocations(combinedText, locationTokens);
   const extractedNameMentions = lead.name ? extractNameMentions(combinedText, lead.name) : [];
-  
+
+  // Determine target state for conflict detection
+  const targetState = geo?.state || lead.state || "FL";
+
   // --- Scoring signals ---
-  
+
   // STRONG: Email exact match (+0.35)
   if (lead.email && extractedEmails.includes(lead.email.toLowerCase())) {
     score += 0.35;
     reasons.push("Email match found");
+    signals.hasEmailMatch = true;
   }
-  
+
   // STRONG: Phone match (+0.30)
   if (lead.phone) {
     const normalizedLeadPhone = normalizePhone(lead.phone);
-    if (extractedPhones.some(p => p.includes(normalizedLeadPhone) || normalizedLeadPhone.includes(p))) {
-      score += 0.30;
+    if (
+      extractedPhones.some((p) => p.includes(normalizedLeadPhone) || normalizedLeadPhone.includes(p))
+    ) {
+      score += 0.3;
       reasons.push("Phone match found");
+      signals.hasPhoneMatch = true;
     }
   }
-  
+
   // MEDIUM-STRONG: Full name in title (+0.25)
   if (lead.name && lowerTitle.includes(normalizeName(lead.name))) {
     score += 0.25;
@@ -194,7 +234,7 @@ export function scoreMatchToLead(params: {
     score += 0.15;
     reasons.push("Full name in content");
   }
-  
+
   // MEDIUM: First + Last name both present (+0.12)
   const { firstName, lastName } = lead.name ? parseFullName(lead.name) : { firstName: "", lastName: "" };
   if (firstName && lastName && firstName.length > 1 && lastName.length > 1) {
@@ -205,22 +245,6 @@ export function scoreMatchToLead(params: {
       reasons.push("First and last name present");
     }
   }
-  
-  // MEDIUM: Location match in Manatee County area (+0.10)
-  const hasLocalLocation = extractedLocations.some(loc => 
-    ["bradenton", "manatee", "palmetto", "lakewood ranch"].includes(loc.toLowerCase()) ||
-    loc.startsWith("34") // Manatee County ZIP codes
-  );
-  if (hasLocalLocation) {
-    score += 0.10;
-    reasons.push("Local area mentioned");
-  }
-  
-  // MEDIUM: ZIP code match (+0.08)
-  if (lead.zipCode && lowerText.includes(lead.zipCode)) {
-    score += 0.08;
-    reasons.push("ZIP code match");
-  }
 
   // STRONG: Company name match (+0.30 in title, +0.20 in text)
   // Very important for finding company websites and business listings
@@ -228,19 +252,73 @@ export function scoreMatchToLead(params: {
     const normalizedCompany = lead.company.toLowerCase().trim();
     // Check for exact company name or significant portion
     if (lowerTitle.includes(normalizedCompany)) {
-      score += 0.30;
+      score += 0.3;
       reasons.push("Company name in title");
+      signals.hasCompanyMatchTitle = true;
     } else if (lowerText.includes(normalizedCompany)) {
-      score += 0.20;
+      score += 0.2;
       reasons.push("Company name in content");
+      signals.hasCompanyMatchText = true;
     }
     // Also check URL for company name (common for company websites)
     const normalizedUrl = doc.url.toLowerCase();
     const companySlug = normalizedCompany.replace(/\s+/g, "").replace(/[^a-z0-9]/g, "");
-    if (normalizedUrl.includes(companySlug) || normalizedUrl.includes(normalizedCompany.replace(/\s+/g, "-"))) {
+    if (
+      normalizedUrl.includes(companySlug) ||
+      normalizedUrl.includes(normalizedCompany.replace(/\s+/g, "-"))
+    ) {
       score += 0.15;
       reasons.push("Company name in URL");
     }
+  }
+
+  // --- Geo-based scoring ---
+
+  // MEDIUM: City match (+0.12)
+  const cityToMatch = geo?.city || lead.city;
+  if (cityToMatch && lowerText.includes(cityToMatch.toLowerCase())) {
+    score += 0.12;
+    reasons.push(`City match (${cityToMatch})`);
+    signals.hasCityMatch = true;
+  }
+
+  // MEDIUM: State match (+0.08)
+  if (targetState) {
+    const hasStateMatch =
+      extractedStateAbbrevs.includes(targetState) ||
+      lowerText.includes((STATE_NAMES[targetState] || "").toLowerCase());
+    if (hasStateMatch) {
+      score += 0.08;
+      reasons.push(`State match (${targetState})`);
+      signals.hasStateMatch = true;
+    }
+  }
+
+  // MEDIUM: ZIP code match (+0.10)
+  const zipToMatch = geo?.zipCode || lead.zipCode;
+  if (zipToMatch && lowerText.includes(zipToMatch)) {
+    score += 0.1;
+    reasons.push("ZIP code match");
+    signals.hasZipMatch = true;
+  }
+
+  // BONUS: Local area mentioned (Manatee/Sarasota County)
+  const hasLocalLocation = extractedLocations.some(
+    (loc) =>
+      [
+        "bradenton",
+        "manatee",
+        "palmetto",
+        "lakewood ranch",
+        "sarasota",
+        "venice",
+        "north port",
+      ].includes(loc.toLowerCase()) ||
+      loc.startsWith("34") // Manatee/Sarasota County ZIP codes
+  );
+  if (hasLocalLocation && !signals.hasCityMatch) {
+    score += 0.08;
+    reasons.push("Local area mentioned");
   }
 
   // BONUS: Category-based adjustments
@@ -249,7 +327,7 @@ export function scoreMatchToLead(params: {
     score += 0.05;
     reasons.push("Official registry source");
   }
-  
+
   if (doc.category === "PROFESSIONAL_PROFILE" || doc.category === "SOCIAL_PROFILE") {
     // Profile pages are more likely to be about the person
     score += 0.03;
@@ -266,29 +344,61 @@ export function scoreMatchToLead(params: {
     score *= 0.5; // Heavily penalize weak people directory matches
     reasons.push("People directory (low confidence)");
   }
-  
-  // NEGATIVE: Location mismatch (different state, not Florida)
-  const hasNonFloridaState = /\b(CA|NY|TX|AZ|NV|WA|OR|CO|GA|NC|VA|PA|OH|IL|MI|MA)\b/.test(combinedText) &&
-                            !lowerText.includes("florida") && !lowerText.includes(" fl ");
-  if (hasNonFloridaState && score > 0) {
-    score *= 0.7;
-    reasons.push("Out-of-state location");
+
+  // NEGATIVE: Location mismatch (different state, not target state)
+  // Check for conflicting states
+  const conflictingStates = extractedStateAbbrevs.filter((s) => s !== targetState);
+  const hasTargetState =
+    extractedStateAbbrevs.includes(targetState) ||
+    lowerText.includes((STATE_NAMES[targetState] || "").toLowerCase());
+
+  if (conflictingStates.length > 0 && !hasTargetState) {
+    // Strong evidence of another state without target state
+    score *= 0.6;
+    reasons.push(`Out-of-state location (${conflictingStates.join(", ")})`);
+    signals.conflictingStates = conflictingStates;
+  } else if (conflictingStates.length > 0) {
+    // Both states mentioned - mild penalty, could be person who moved
+    signals.conflictingStates = conflictingStates;
   }
-  
+
   // Cap score at 1.0
   score = Math.min(score, 1.0);
-  
+
   return {
     score,
     reasons,
+    signals,
     extracted: {
       emails: extractedEmails,
       phones: extractedPhones,
       locations: extractedLocations,
       personNameMentions: extractedNameMentions,
+      stateAbbrevs: extractedStateAbbrevs,
     },
   };
 }
+
+// State name lookup for geo matching
+const STATE_NAMES: Record<string, string> = {
+  FL: "Florida",
+  CA: "California",
+  TX: "Texas",
+  NY: "New York",
+  AZ: "Arizona",
+  GA: "Georgia",
+  NC: "North Carolina",
+  VA: "Virginia",
+  PA: "Pennsylvania",
+  OH: "Ohio",
+  IL: "Illinois",
+  MI: "Michigan",
+  MA: "Massachusetts",
+  WA: "Washington",
+  OR: "Oregon",
+  CO: "Colorado",
+  NV: "Nevada",
+};
 
 /**
  * Default thresholds for filtering results

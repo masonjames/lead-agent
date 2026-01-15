@@ -52,8 +52,16 @@ export interface RenderableReport {
       name?: string;
       headline?: string;
       confidence?: number;
+      confidenceTier?: "CONFIRMED" | "LIKELY" | "POSSIBLE" | "LOW";
+      candidateLabel?: string;
+      candidateRank?: number;
+      isPrimaryCandidate?: boolean;
       matchReasons?: string[];
     }>;
+    /** Whether multiple people may match this name */
+    nameIsAmbiguous?: boolean;
+    /** Note about disambiguation */
+    disambiguationNote?: string;
     webResearchSummary?: string;
     webResearchSources?: Array<{
       url: string;
@@ -340,21 +348,35 @@ export function renderReportHtml(params: RenderReportParams): string {
     </div>
     ` : ""}
     ${enrichment.publicProfiles?.length ? `
-    <h3 style="margin-top: 12px;">Verified Profiles</h3>
-    ${enrichment.publicProfiles.slice(0, 5).map((profile) => {
+    <h3 style="margin-top: 12px;">Public Profiles${enrichment.nameIsAmbiguous ? ` <span style="color: #f59e0b; font-size: 11px; font-weight: normal;">(multiple candidates)</span>` : ""}</h3>
+    ${enrichment.nameIsAmbiguous && enrichment.disambiguationNote ? `<div style="background: #fef3c7; padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #92400e; margin-bottom: 12px;">⚠️ ${enrichment.disambiguationNote}</div>` : ""}
+    ${enrichment.publicProfiles.slice(0, 10).map((profile) => {
       const platformBadge = profile.platform && profile.platform !== "Other"
         ? `<span style="display: inline-block; background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 6px;">${profile.platform}</span>`
         : "";
-      const confidencePercent = profile.confidence ? Math.round(profile.confidence * 100) : null;
-      const confidenceBadge = confidencePercent
-        ? `<span style="color: ${confidencePercent >= 65 ? '#059669' : '#9ca3af'}; font-size: 11px;">${confidencePercent}% match</span>`
+      // Confidence tier badge with color coding
+      const tierColors: Record<string, { bg: string; text: string }> = {
+        "CONFIRMED": { bg: "#d1fae5", text: "#065f46" },
+        "LIKELY": { bg: "#dbeafe", text: "#1e40af" },
+        "POSSIBLE": { bg: "#fef3c7", text: "#92400e" },
+        "LOW": { bg: "#f3f4f6", text: "#6b7280" },
+      };
+      const tier = profile.confidenceTier || "LOW";
+      const tierStyle = tierColors[tier] || tierColors["LOW"];
+      const tierBadge = profile.confidenceTier
+        ? `<span style="display: inline-block; background: ${tierStyle.bg}; color: ${tierStyle.text}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">${tier}</span>`
+        : "";
+      // Candidate label for non-primary candidates
+      const candidateNote = profile.candidateLabel && !profile.isPrimaryCandidate
+        ? `<span style="color: #9ca3af; font-size: 11px; margin-left: 6px;">(${profile.candidateLabel})</span>`
         : "";
       return `
       <div style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;">
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           ${platformBadge}
+          ${tierBadge}
           <a href="${profile.url}" target="_blank" style="font-weight: 500;">${profile.name || "Profile"}</a>
-          ${confidenceBadge}
+          ${candidateNote}
         </div>
         ${profile.headline ? `<div style="color: #6b7280; font-size: 12px; margin-top: 4px;">${profile.headline.substring(0, 150)}</div>` : ""}
         ${profile.matchReasons?.length ? `<div style="color: #9ca3af; font-size: 11px; margin-top: 2px;">Matched: ${profile.matchReasons.slice(0, 3).join(", ")}</div>` : ""}
@@ -474,14 +496,19 @@ export function renderReportText(params: RenderReportParams): string {
   }
 
   if (enrichment?.publicProfiles?.length) {
+    const headerSuffix = enrichment.nameIsAmbiguous ? " (multiple candidates)" : "";
     lines.push(
       ``,
-      `--- VERIFIED PROFILES ---`
+      `--- PUBLIC PROFILES${headerSuffix} ---`
     );
-    for (const profile of enrichment.publicProfiles.slice(0, 5)) {
+    if (enrichment.nameIsAmbiguous && enrichment.disambiguationNote) {
+      lines.push(`  ⚠️ ${enrichment.disambiguationNote}`);
+    }
+    for (const profile of enrichment.publicProfiles.slice(0, 10)) {
       const platform = profile.platform || profile.source;
-      const confidence = profile.confidence ? `(${Math.round(profile.confidence * 100)}% match)` : "";
-      lines.push(`  [${platform}] ${profile.name || "Profile"} ${confidence}`);
+      const tier = profile.confidenceTier ? `[${profile.confidenceTier}]` : "";
+      const candidateNote = profile.candidateLabel && !profile.isPrimaryCandidate ? `(${profile.candidateLabel})` : "";
+      lines.push(`  ${tier} [${platform}] ${profile.name || "Profile"} ${candidateNote}`);
       lines.push(`    ${profile.url}`);
     }
   }

@@ -1,10 +1,31 @@
 /**
  * Exa Enrichment Types
- * 
+ *
  * Type definitions for the enhanced Exa enrichment system.
  */
 
 import type { ExaSourceCategory, ProfilePlatform } from "./categorize";
+
+/**
+ * Confidence tier for profile matches
+ * Used to help disambiguate when multiple people share the same name
+ */
+export type ConfidenceTier = "CONFIRMED" | "LIKELY" | "POSSIBLE" | "LOW";
+
+/**
+ * Match signals extracted during scoring
+ * Used for candidate grouping and disambiguation
+ */
+export interface MatchSignals {
+  hasEmailMatch: boolean;
+  hasPhoneMatch: boolean;
+  hasCompanyMatchTitle: boolean;
+  hasCompanyMatchText: boolean;
+  hasCityMatch: boolean;
+  hasStateMatch: boolean;
+  hasZipMatch: boolean;
+  conflictingStates: string[];
+}
 
 /**
  * Query task for Exa search
@@ -59,6 +80,20 @@ export interface ExaEnrichedSource {
 }
 
 /**
+ * Candidate information for profile disambiguation
+ */
+export interface ProfileCandidateInfo {
+  /** Stable candidate group ID */
+  id: string;
+  /** Human-readable candidate label (e.g., "Coldwell Banker - Bradenton, FL") */
+  label: string;
+  /** Rank among candidates (1 = best match) */
+  rank: number;
+  /** Whether this is the primary (best) candidate */
+  isPrimary: boolean;
+}
+
+/**
  * Public profile for display in reports
  */
 export interface ExaPublicProfile {
@@ -74,8 +109,42 @@ export interface ExaPublicProfile {
   headline?: string;
   /** Confidence score (0-1) */
   confidence: number;
+  /** Confidence tier for disambiguation */
+  confidenceTier?: ConfidenceTier;
   /** Why this was matched */
   matchReasons: string[];
+  /** Candidate grouping info (when multiple people match) */
+  candidate?: ProfileCandidateInfo;
+}
+
+/**
+ * Grouped candidate for name disambiguation
+ */
+export interface ExaProfileCandidate {
+  /** Stable candidate group ID */
+  id: string;
+  /** Human-readable candidate label */
+  label: string;
+  /** Confidence tier for this candidate group */
+  confidenceTier: ConfidenceTier;
+  /** Aggregate confidence score */
+  confidence: number;
+  /** Roll-up reasons for this candidate */
+  reasons: string[];
+  /** Profiles belonging to this candidate */
+  profiles: ExaPublicProfile[];
+}
+
+/**
+ * Name disambiguation metadata
+ */
+export interface NameDisambiguation {
+  /** Whether multiple people may match this name */
+  isAmbiguous: boolean;
+  /** Number of candidate groups found */
+  candidateCount: number;
+  /** Optional explanatory note */
+  note?: string;
 }
 
 /**
@@ -109,15 +178,21 @@ export interface ExaEnrichmentResult {
     summaryMarkdown: string;
     /** Number of profiles found */
     profilesFound: number;
-    
-    // NEW: Structured outputs
+
+    // Structured outputs
     /** Public profiles (high-confidence, profile-type sources) */
     publicProfiles: ExaPublicProfile[];
     /** Web research summary in markdown */
     webResearchSummaryMarkdown: string;
     /** Web research sources */
     webResearchSources: ExaWebResearchSource[];
-    
+
+    // Candidate grouping for disambiguation
+    /** Grouped profile candidates (when name is ambiguous) */
+    profileCandidates?: ExaProfileCandidate[];
+    /** Name disambiguation metadata */
+    nameDisambiguation?: NameDisambiguation;
+
     // Debug/trace info
     /** All enriched sources */
     sources: ExaEnrichedSource[];

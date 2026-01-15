@@ -77,8 +77,16 @@ export interface WorkflowReport {
       name?: string;
       headline?: string;
       confidence?: number;
+      confidenceTier?: "CONFIRMED" | "LIKELY" | "POSSIBLE" | "LOW";
+      candidateLabel?: string;
+      candidateRank?: number;
+      isPrimaryCandidate?: boolean;
       matchReasons?: string[];
     }>;
+    /** Whether multiple people may match this name */
+    nameIsAmbiguous?: boolean;
+    /** Note about disambiguation */
+    disambiguationNote?: string;
     webResearchSummary?: string;
     webResearchSources?: Array<{
       url: string;
@@ -243,6 +251,7 @@ export const stepEnrichExa = async (
 
   if (exaResult.status === "SUCCESS" && exaResult.data) {
     // Use the new structured output from Exa enrichment
+    // Map profiles with new confidence tiers and candidate grouping
     const publicProfiles = exaResult.data.publicProfiles.map((profile) => ({
       source: "exa",
       platform: profile.platform,
@@ -251,6 +260,10 @@ export const stepEnrichExa = async (
       name: profile.displayName,
       headline: profile.headline,
       confidence: profile.confidence,
+      confidenceTier: profile.confidenceTier,
+      candidateLabel: profile.candidate?.label,
+      candidateRank: profile.candidate?.rank,
+      isPrimaryCandidate: profile.candidate?.isPrimary,
       matchReasons: profile.matchReasons,
     }));
 
@@ -263,9 +276,13 @@ export const stepEnrichExa = async (
       matchScore: source.matchScore,
     }));
 
+    // Extract disambiguation info if present
+    const nameDisambiguation = exaResult.data.nameDisambiguation;
+
     console.log(
       `[Inbound Workflow] Exa enrichment found ${publicProfiles.length} profiles, ` +
-      `${webResearchSources.length} web sources`
+        `${webResearchSources.length} web sources` +
+        (nameDisambiguation?.isAmbiguous ? ` (${nameDisambiguation.candidateCount} candidates)` : "")
     );
 
     return {
@@ -273,6 +290,8 @@ export const stepEnrichExa = async (
       enrichment: {
         ...report.enrichment,
         publicProfiles,
+        nameIsAmbiguous: nameDisambiguation?.isAmbiguous,
+        disambiguationNote: nameDisambiguation?.note,
         webResearchSummary: exaResult.data.webResearchSummaryMarkdown,
         webResearchSources,
       },

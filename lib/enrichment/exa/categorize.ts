@@ -85,10 +85,15 @@ export function categorizeExaUrl(input: {
   const lowerTitle = (title || "").toLowerCase();
   
   // Check for LinkedIn profiles
+  // Support various subdomains: www.linkedin.com, m.linkedin.com, etc.
   if (domainMatches(domain, ["linkedin.com"])) {
-    const isPersonProfile = lowerUrl.includes("/in/") || lowerUrl.includes("/pub/");
+    // Person profile URLs: /in/username, /pub/username, with optional query params
+    const isPersonProfile =
+      /linkedin\.com\/in\/[a-zA-Z0-9_-]+/i.test(url) ||
+      /linkedin\.com\/pub\/[a-zA-Z0-9_-]+/i.test(url);
     const isCompanyPage = lowerUrl.includes("/company/");
-    
+    const isSchoolPage = lowerUrl.includes("/school/");
+
     if (isPersonProfile) {
       return {
         category: "PROFESSIONAL_PROFILE",
@@ -97,7 +102,7 @@ export function categorizeExaUrl(input: {
         confidence: 0.9,
       };
     }
-    if (isCompanyPage) {
+    if (isCompanyPage || isSchoolPage) {
       return {
         category: "BUSINESS_REGISTRY",
         platform: "LinkedIn",
@@ -105,7 +110,7 @@ export function categorizeExaUrl(input: {
         confidence: 0.7,
       };
     }
-    // Generic LinkedIn page
+    // Generic LinkedIn page (search results, posts, etc.)
     return {
       category: "PROFESSIONAL_PROFILE",
       platform: "LinkedIn",
@@ -115,19 +120,42 @@ export function categorizeExaUrl(input: {
   }
   
   // Check for Facebook profiles
+  // Support various subdomains: www.facebook.com, m.facebook.com, l.facebook.com, etc.
   if (domainMatches(domain, ["facebook.com", "fb.com"])) {
-    // Look for profile-like patterns
-    const isProfileUrl = /facebook\.com\/(?!pages|groups|events|watch|marketplace|gaming|business)[a-zA-Z0-9.]+\/?$/i.test(url);
-    const isProfilePage = lowerUrl.includes("/profile.php") || lowerUrl.includes("/people/");
-    
-    if (isProfileUrl || isProfilePage) {
+    // Detect various Facebook profile URL patterns
+    const isVanityUrl =
+      /facebook\.com\/(?!pages|groups|events|watch|marketplace|gaming|business|ads|help|settings|policies|reel)[a-zA-Z0-9.]+\/?(?:\?|$)/i.test(
+        url
+      );
+    const isProfilePhpUrl = /facebook\.com\/profile\.php\?id=\d+/i.test(url);
+    const isPeopleUrl = /facebook\.com\/people\/[^/]+\/\d+/i.test(url);
+    const isPublicUrl = /facebook\.com\/public\/[^/]+/i.test(url);
+
+    const isProfileUrl = isVanityUrl || isProfilePhpUrl || isPeopleUrl || isPublicUrl;
+
+    // Business pages and groups
+    const isBusinessPage =
+      lowerUrl.includes("/pages/") ||
+      lowerUrl.includes("/groups/") ||
+      lowerUrl.includes("/business/");
+
+    if (isProfileUrl && !isBusinessPage) {
       return {
         category: "SOCIAL_PROFILE",
         platform: "Facebook",
         isProfile: true,
-        confidence: 0.8,
+        confidence: 0.85,
       };
     }
+    if (isBusinessPage) {
+      return {
+        category: "BUSINESS_LISTING",
+        platform: "Facebook",
+        isProfile: false,
+        confidence: 0.7,
+      };
+    }
+    // Generic Facebook page (posts, photos, etc.)
     return {
       category: "SOCIAL_PROFILE",
       platform: "Facebook",
