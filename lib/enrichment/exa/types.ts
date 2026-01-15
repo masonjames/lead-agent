@@ -148,4 +148,5 @@ export interface ExaEnrichmentParams {
   phone?: string;
   address?: string;
   location?: string;
+  company?: string;
 }

@@ -264,16 +264,21 @@ export function scoreMatchToLead(params: {
 
 /**
  * Default thresholds for filtering results
+ *
+ * NOTE: Thresholds are intentionally low to avoid missing valuable results.
+ * For real estate leads, showing more results is better than missing profiles.
  */
 export const MATCH_THRESHOLDS = {
   /** Minimum score to be included as a public profile */
-  PROFILE_MIN: 0.45,
+  PROFILE_MIN: 0.20,
   /** Minimum score to be included as web research */
-  WEB_RESEARCH_MIN: 0.35,
+  WEB_RESEARCH_MIN: 0.15,
   /** Score above which a result is considered high confidence */
-  HIGH_CONFIDENCE: 0.65,
+  HIGH_CONFIDENCE: 0.50,
   /** People directories need higher score to be shown */
-  PEOPLE_DIRECTORY_MIN: 0.70,
+  PEOPLE_DIRECTORY_MIN: 0.60,
+  /** High-value domains (brokerages, agent sites) get auto-included above this */
+  HIGH_VALUE_DOMAIN_MIN: 0.10,
 };
 
 /**
@@ -290,23 +295,34 @@ export function shouldIncludeResult(
       asProfile: false,
     };
   }
-  
-  // Profile-type categories
-  const profileCategories: ExaSourceCategory[] = [
-    "SOCIAL_PROFILE",
-    "PROFESSIONAL_PROFILE",
+
+  // High-value profile categories - be very lenient
+  const highValueCategories: ExaSourceCategory[] = [
     "REAL_ESTATE_PROFILE",
     "LICENSE_REGISTRY",
     "BUSINESS_REGISTRY",
   ];
-  
+
+  if (highValueCategories.includes(category)) {
+    return {
+      include: score >= MATCH_THRESHOLDS.HIGH_VALUE_DOMAIN_MIN,
+      asProfile: score >= MATCH_THRESHOLDS.HIGH_VALUE_DOMAIN_MIN,
+    };
+  }
+
+  // Social/professional profiles
+  const profileCategories: ExaSourceCategory[] = [
+    "SOCIAL_PROFILE",
+    "PROFESSIONAL_PROFILE",
+  ];
+
   if (profileCategories.includes(category)) {
     return {
       include: score >= MATCH_THRESHOLDS.PROFILE_MIN,
       asProfile: score >= MATCH_THRESHOLDS.PROFILE_MIN,
     };
   }
-  
+
   // News and other
   return {
     include: score >= MATCH_THRESHOLDS.WEB_RESEARCH_MIN,

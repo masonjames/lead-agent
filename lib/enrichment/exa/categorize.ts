@@ -240,7 +240,28 @@ export function categorizeExaUrl(input: {
       confidence: 0.2, // Low confidence = low value
     };
   }
-  
+
+  // Check for personal agent/team websites
+  // Common patterns: team*.com, *realtor.com, *realestate*.com, *homes.com
+  const isPersonalAgentSite =
+    domain.startsWith("team") ||
+    domain.includes("realtor") ||
+    domain.includes("realestate") ||
+    domain.includes("realty") ||
+    (domain.includes("homes") && !domainMatches(domain, ["homes.com"])) ||
+    // Check if title suggests an agent page
+    (lowerTitle.includes("real estate") && lowerTitle.includes("agent")) ||
+    (lowerTitle.includes("realtor") && !lowerTitle.includes("realtor.com"));
+
+  if (isPersonalAgentSite) {
+    return {
+      category: "REAL_ESTATE_PROFILE",
+      platform: "Brokerage",
+      isProfile: true,
+      confidence: 0.75,
+    };
+  }
+
   // Default: OTHER
   return {
     category: "OTHER",

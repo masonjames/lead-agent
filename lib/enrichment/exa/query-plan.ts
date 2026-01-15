@@ -23,6 +23,7 @@ export interface QueryPlanParams {
   phone?: string;
   address?: string;
   location?: string;
+  company?: string;
 }
 
 /**
@@ -155,7 +156,34 @@ export function buildExaQueryPlan(params: QueryPlanParams): ExaQueryTask[] {
       maxCharacters: DEFAULT_MAX_CHARACTERS,
     });
   }
-  
+
+  // --- Task 6: Company/Team Website Search (if company provided) ---
+  // High-value: finds team websites, brokerage profiles
+  const { company } = params;
+  if (company && name) {
+    // Search for company name + person name together
+    const companyQuery = `"${company}" "${name}"`;
+
+    tasks.push({
+      intent: "company_website",
+      query: companyQuery,
+      excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
+      numResults: 5,
+      maxCharacters: DEFAULT_MAX_CHARACTERS,
+    });
+
+    // Also search for just the company name to find their website directly
+    const companyOnlyQuery = `"${company}" real estate`;
+
+    tasks.push({
+      intent: "company_direct",
+      query: companyOnlyQuery,
+      excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
+      numResults: 3,
+      maxCharacters: DEFAULT_MAX_CHARACTERS,
+    });
+  }
+
   return tasks;
 }
 

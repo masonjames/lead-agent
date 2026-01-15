@@ -202,11 +202,13 @@ export const DOMAIN_CATEGORY_PATTERNS = {
   
   // Real estate platforms (agent/listing profiles)
   REAL_ESTATE_PROFILE: [
+    // Major portals
     "realtor.com",
     "zillow.com",
     "redfin.com",
     "homes.com",
     "trulia.com",
+    // National brokerages
     "compass.com",
     "coldwellbanker.com",
     "century21.com",
@@ -214,6 +216,22 @@ export const DOMAIN_CATEGORY_PATTERNS = {
     "remax.com",
     "sothebysrealty.com",
     "berkshirehathawayhs.com",
+    "weichert.com",
+    "exitrealty.com",
+    "exp.com",
+    "exprealty.com",
+    // Florida brokerages
+    "finepropertiesfl.com",
+    "michaelsaunders.com",
+    "waterfrontgroup.com",
+    "premieresothebysrealty.com",
+    "floridamoves.com",
+    "stockrealty.com",
+    "mvausa.com",
+    "johnrwood.com",
+    "royalshellrealestate.com",
+    // Agent team sites (common patterns)
+    "team*.com",
   ],
   
   // News/media

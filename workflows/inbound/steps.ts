@@ -236,6 +236,7 @@ export const stepEnrichExa = async (
     phone: contact?.phone,
     address: contact?.address,
     location: "Manatee County, Florida",
+    company: report.formData?.company,
   });
 
   if (exaResult.status === "SUCCESS" && exaResult.data) {
