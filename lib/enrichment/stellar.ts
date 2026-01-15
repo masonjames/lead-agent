@@ -125,7 +125,7 @@ async function persistToDatabase(params: {
 
   await updateIngestionJob(jobId, { status: "parsed" });
 
-  const extracted = params.data ? (params.data as Record<string, unknown>) : {};
+  const extracted = params.data ? (params.data as unknown as Record<string, unknown>) : {};
   const domSignature = sha256(JSON.stringify(extracted));
 
   await storeParseArtifact({

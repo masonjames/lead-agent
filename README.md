@@ -127,6 +127,7 @@ Open http://localhost:3000 and submit a test lead.
 
 - `pnpm pao:test` — live PAO scraper test runner
 - `pnpm pao:test --county=sarasota --debug` — capture screenshots/HTML for debugging
+- `pnpm stellar:session` — generate StellarMLS storageState (use `--json` for raw JSON)
 
 ## Project structure
 
