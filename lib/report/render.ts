@@ -46,11 +46,22 @@ export interface RenderableReport {
     };
     publicProfiles?: Array<{
       source: string;
+      platform?: string;
+      category?: string;
       url: string;
       name?: string;
       headline?: string;
+      confidence?: number;
+      matchReasons?: string[];
     }>;
     webResearchSummary?: string;
+    webResearchSources?: Array<{
+      url: string;
+      title?: string;
+      snippet?: string;
+      category?: string;
+      matchScore?: number;
+    }>;
   };
   score?: {
     value: number;
@@ -329,15 +340,40 @@ export function renderReportHtml(params: RenderReportParams): string {
     </div>
     ` : ""}
     ${enrichment.publicProfiles?.length ? `
-    <h3 style="margin-top: 12px;">Public Profiles</h3>
-    ${enrichment.publicProfiles.map((profile) => `
-      <div style="padding: 4px 0; font-size: 14px;">
-        <a href="${profile.url}" target="_blank">${profile.source}: ${profile.name || "Profile"}</a>
-        ${profile.headline ? `<div style="color: #6b7280; font-size: 12px;">${profile.headline}</div>` : ""}
+    <h3 style="margin-top: 12px;">Verified Profiles</h3>
+    ${enrichment.publicProfiles.slice(0, 5).map((profile) => {
+      const platformBadge = profile.platform && profile.platform !== "Other"
+        ? `<span style="display: inline-block; background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 6px;">${profile.platform}</span>`
+        : "";
+      const confidencePercent = profile.confidence ? Math.round(profile.confidence * 100) : null;
+      const confidenceBadge = confidencePercent
+        ? `<span style="color: ${confidencePercent >= 65 ? '#059669' : '#9ca3af'}; font-size: 11px;">${confidencePercent}% match</span>`
+        : "";
+      return `
+      <div style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${platformBadge}
+          <a href="${profile.url}" target="_blank" style="font-weight: 500;">${profile.name || "Profile"}</a>
+          ${confidenceBadge}
+        </div>
+        ${profile.headline ? `<div style="color: #6b7280; font-size: 12px; margin-top: 4px;">${profile.headline.substring(0, 150)}</div>` : ""}
+        ${profile.matchReasons?.length ? `<div style="color: #9ca3af; font-size: 11px; margin-top: 2px;">Matched: ${profile.matchReasons.slice(0, 3).join(", ")}</div>` : ""}
       </div>
-    `).join("")}
+    `}).join("")}
     ` : ""}
-    ${enrichment.webResearchSummary ? `
+    ${enrichment.webResearchSources?.length ? `
+    <h3 style="margin-top: 16px;">Additional Web Sources</h3>
+    ${enrichment.webResearchSources.slice(0, 3).map((source) => {
+      const categoryLabel = source.category ? source.category.replace(/_/g, " ").toLowerCase() : "web";
+      return `
+      <div style="padding: 6px 0; font-size: 13px;">
+        <span style="color: #9ca3af; font-size: 11px;">[${categoryLabel}]</span>
+        <a href="${source.url}" target="_blank">${source.title || "Web Result"}</a>
+        ${source.snippet ? `<div style="color: #6b7280; font-size: 12px; margin-top: 2px;">${source.snippet.substring(0, 100)}...</div>` : ""}
+      </div>
+    `}).join("")}
+    ` : ""}
+    ${enrichment.webResearchSummary && !enrichment.publicProfiles?.length && !enrichment.webResearchSources?.length ? `
     <h3 style="margin-top: 12px;">Web Research</h3>
     <div style="font-size: 14px; color: #4b5563;">${markdownToHtml(enrichment.webResearchSummary)}</div>
     ` : ""}
@@ -435,6 +471,30 @@ export function renderReportText(params: RenderReportParams): string {
       `Median Income: ${formatCurrency(enrichment.demographics.medianIncome)}`,
       `Median Home Value: ${formatCurrency(enrichment.demographics.medianHomeValue)}`
     );
+  }
+
+  if (enrichment?.publicProfiles?.length) {
+    lines.push(
+      ``,
+      `--- VERIFIED PROFILES ---`
+    );
+    for (const profile of enrichment.publicProfiles.slice(0, 5)) {
+      const platform = profile.platform || profile.source;
+      const confidence = profile.confidence ? `(${Math.round(profile.confidence * 100)}% match)` : "";
+      lines.push(`  [${platform}] ${profile.name || "Profile"} ${confidence}`);
+      lines.push(`    ${profile.url}`);
+    }
+  }
+
+  if (enrichment?.webResearchSources?.length) {
+    lines.push(
+      ``,
+      `--- WEB SOURCES ---`
+    );
+    for (const source of enrichment.webResearchSources.slice(0, 3)) {
+      lines.push(`  ${source.title || "Web Result"}`);
+      lines.push(`    ${source.url}`);
+    }
   }
 
   lines.push(

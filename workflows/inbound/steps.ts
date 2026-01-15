@@ -70,11 +70,22 @@ export interface WorkflowReport {
     };
     publicProfiles?: Array<{
       source: string;
+      platform?: string;
+      category?: string;
       url: string;
       name?: string;
       headline?: string;
+      confidence?: number;
+      matchReasons?: string[];
     }>;
     webResearchSummary?: string;
+    webResearchSources?: Array<{
+      url: string;
+      title?: string;
+      snippet?: string;
+      category?: string;
+      matchScore?: number;
+    }>;
   };
   score?: {
     value: number;
@@ -228,22 +239,39 @@ export const stepEnrichExa = async (
   });
 
   if (exaResult.status === "SUCCESS" && exaResult.data) {
-    // Convert Exa sources to public profiles format
-    const publicProfiles = exaResult.data.sources.map((source) => ({
+    // Use the new structured output from Exa enrichment
+    const publicProfiles = exaResult.data.publicProfiles.map((profile) => ({
       source: "exa",
-      url: source.url,
-      name: source.title,
-      headline: source.snippet,
+      platform: profile.platform,
+      category: profile.category,
+      url: profile.url,
+      name: profile.displayName,
+      headline: profile.headline,
+      confidence: profile.confidence,
+      matchReasons: profile.matchReasons,
     }));
 
-    console.log(`[Inbound Workflow] Exa enrichment found ${publicProfiles.length} sources`);
+    // Also include web research sources for the report
+    const webResearchSources = exaResult.data.webResearchSources.map((source) => ({
+      url: source.url,
+      title: source.title,
+      snippet: source.snippet,
+      category: source.category,
+      matchScore: source.matchScore,
+    }));
+
+    console.log(
+      `[Inbound Workflow] Exa enrichment found ${publicProfiles.length} profiles, ` +
+      `${webResearchSources.length} web sources`
+    );
 
     return {
       ...report,
       enrichment: {
         ...report.enrichment,
         publicProfiles,
-        webResearchSummary: exaResult.data.summaryMarkdown,
+        webResearchSummary: exaResult.data.webResearchSummaryMarkdown,
+        webResearchSources,
       },
       provenance: {
         ...report.provenance,
