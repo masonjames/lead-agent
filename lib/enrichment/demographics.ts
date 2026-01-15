@@ -1,11 +1,20 @@
 /**
  * Demographics Enrichment Service
- * 
- * Provides demographic insights based on location (zip code, city)
- * using Exa AI to search for census and demographic data.
+ *
+ * Provides demographic insights based on location (zip code, city).
+ * Uses static census data for Manatee County (instant, reliable)
+ * with Exa AI fallback for other areas.
  */
 
 import { exa } from "@/lib/exa";
+import {
+  getZipCodeDemographics,
+  isManateeCountyZip,
+  formatIncome,
+  formatHomeValue,
+  MANATEE_COUNTY_DEFAULTS,
+  type ZipCodeDemographics,
+} from "./demographics-data";
 
 export type EnrichmentStatus = "SUCCESS" | "SKIPPED" | "FAILED";
 
@@ -26,17 +35,31 @@ export interface DemographicsEnrichmentResult {
   error?: string;
   provenance: {
     source: "exa_demographics";
-    method: "search_inference";
+    method: "search_inference" | "static_lookup";
     confidence: number;
     timestamp: string;
   };
 }
 
 /**
+ * Convert ZIP code lookup data to DemographicInsights format
+ */
+function zipDataToInsights(zipData: ZipCodeDemographics): DemographicInsights {
+  return {
+    medianHouseholdIncome: formatIncome(zipData.medianHouseholdIncome),
+    medianHomeValue: formatHomeValue(zipData.medianHomeValue),
+    incomeProxy: zipData.incomeProxy,
+    populationDensity: zipData.populationDensity || "suburban",
+    lifestyleIndicators: zipData.characteristics,
+  };
+}
+
+/**
  * Get demographic insights for a location
- * 
- * Uses Exa to search for census data and demographic information
- * for a given zip code or city/state combination.
+ *
+ * Strategy:
+ * 1. For Manatee County ZIP codes: Use instant static lookup (100% reliable)
+ * 2. For other areas: Fall back to Exa search (variable results)
  */
 export async function getDemographicInsights(params: {
   zipCode?: string;
@@ -63,6 +86,45 @@ export async function getDemographicInsights(params: {
     };
   }
 
+  // === PRIORITY 1: Static lookup for Manatee County ZIP codes ===
+  if (params.zipCode) {
+    const zipData = getZipCodeDemographics(params.zipCode);
+
+    if (zipData) {
+      console.log(
+        `[Demographics Enrichment] Using cached census data for ZIP ${params.zipCode} (${zipData.city} - ${zipData.area || ""})`
+      );
+
+      return {
+        status: "SUCCESS",
+        data: zipDataToInsights(zipData),
+        provenance: {
+          ...baseProvenance,
+          method: "static_lookup" as const,
+          confidence: 0.95, // High confidence for census data
+        },
+      };
+    }
+
+    // Check if it's a Manatee County ZIP we don't have specific data for
+    if (isManateeCountyZip(params.zipCode)) {
+      console.log(
+        `[Demographics Enrichment] ZIP ${params.zipCode} is in Manatee County but no specific data, using county defaults`
+      );
+
+      return {
+        status: "SUCCESS",
+        data: zipDataToInsights(MANATEE_COUNTY_DEFAULTS),
+        provenance: {
+          ...baseProvenance,
+          method: "static_lookup" as const,
+          confidence: 0.7,
+        },
+      };
+    }
+  }
+
+  // === PRIORITY 2: Exa search for non-Manatee County areas ===
   // Build location string
   let location = "";
   if (params.zipCode) {
@@ -82,7 +144,7 @@ export async function getDemographicInsights(params: {
   }
 
   const query = `${location} demographics median income census data`;
-  console.log(`[Demographics Enrichment] Searching for: ${query}`);
+  console.log(`[Demographics Enrichment] Searching Exa for: ${query}`);
 
   try {
     const response = await exa.searchAndContents(query, {
