@@ -102,12 +102,68 @@ async function findFirstVisible(page: Page, selectors: string[]) {
   return null;
 }
 
+async function waitForDaVinciWidget(page: Page, timeoutMs: number = 15000): Promise<void> {
+  log("[stellar-session] Waiting for DaVinci login widget to load...");
+
+  try {
+    // Wait for any input field to appear (widget has rendered)
+    await page.waitForSelector("input", { timeout: timeoutMs });
+  } catch {
+    log("[stellar-session] No input field appeared within timeout");
+  }
+
+  // Additional wait for network activity to settle
+  await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+}
+
+/**
+ * Detect MFA prompts by checking for specific UI elements, not CSS class names
+ * This avoids false positives from stylesheet content
+ */
+function detectMfaRequired(pageContent: string): { required: boolean; reason?: string } {
+  // Only check the visible text content, not style/script blocks
+  // Remove style and script blocks to avoid false positives
+  const cleanedContent = pageContent
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .toLowerCase();
+
+  const mfaPatterns = [
+    { pattern: "multi-factor authentication", reason: "MFA prompt detected" },
+    { pattern: "enter verification code", reason: "Verification code requested" },
+    { pattern: "one-time password", reason: "OTP requested" },
+    { pattern: "enter the code", reason: "Code entry requested" },
+    { pattern: "we sent a code", reason: "Code sent notification" },
+    { pattern: "authentication code", reason: "Auth code requested" },
+    { pattern: "verify your identity", reason: "Identity verification required" },
+    { pattern: "two-factor authentication", reason: "2FA prompt detected" },
+    { pattern: "security code", reason: "Security code requested" },
+    { pattern: "6-digit code", reason: "OTP code requested" },
+  ];
+
+  for (const { pattern, reason } of mfaPatterns) {
+    if (cleanedContent.includes(pattern)) {
+      return { required: true, reason };
+    }
+  }
+
+  return { required: false };
+}
+
 async function ensureLoggedIn(page: Page): Promise<void> {
   const loginUrl = process.env.STELLARMLS_PING_AUTHORIZE_URL;
   if (!loginUrl) {
     throw new PlaywrightError("Missing STELLARMLS_PING_AUTHORIZE_URL");
   }
 
+  const username = process.env.STELLARMLS_USERNAME;
+  const password = process.env.STELLARMLS_PASSWORD;
+
+  if (!username || !password) {
+    throw new PlaywrightError("Missing STELLARMLS_USERNAME or STELLARMLS_PASSWORD");
+  }
+
+  log("[stellar-session] Navigating to StellarMLS login...");
   await page.goto(loginUrl, { waitUntil: "domcontentloaded" });
 
   const html = await page.content();
@@ -116,90 +172,115 @@ async function ensureLoggedIn(page: Page): Promise<void> {
     throw new PlaywrightError(`Blocked during StellarMLS login: ${block.reason}`);
   }
 
-  const usernameSelector = [
+  // Wait for DaVinci widget to render
+  await waitForDaVinciWidget(page);
+
+  // PingOne DaVinci login flow - Step 1: Enter MLS ID
+  // The form uses React Aria components, so we need flexible selectors
+  const mlsIdSelectors = [
+    // DaVinci widget selectors (React Aria)
+    'input[aria-labelledby*="Stellar MLS ID" i]',
+    'label:has-text("Stellar MLS ID") + div input',
+    'label:has-text("MLS ID") + div input',
+    // Generic visible input (DaVinci form usually has one input per step)
+    'form.rjsf input:not([type="hidden"])',
+    'input.is-default',
+    // Fallback traditional selectors
     'input[name="pf.username"]',
     'input[name="username"]',
-    'input[name*="user"]',
-    'input[type="email"]',
-    'input[autocomplete="username"]',
-    '#username',
+    'input[type="text"]:visible',
+    'input:not([type="hidden"]):not([type="submit"]):visible',
   ];
-  const passwordSelector = [
+
+  let inputField = await findFirstVisible(page, mlsIdSelectors);
+
+  if (!inputField) {
+    // Try to find any visible input
+    const allInputs = await page.locator("input:visible").all();
+    log(`[stellar-session] Found ${allInputs.length} visible inputs`);
+    if (allInputs.length > 0) {
+      inputField = allInputs[0];
+    }
+  }
+
+  if (!inputField) {
+    throw new PlaywrightError("Could not find MLS ID input field");
+  }
+
+  log("[stellar-session] Entering MLS ID...");
+  await inputField.fill(username, { timeout: 10000 });
+
+  // Find and click submit button
+  const submitSelectors = [
+    'button[data-id="form-submit-button"]',
+    'button[type="submit"]',
+    'button:has-text("Log In")',
+    'button:has-text("Next")',
+    'button:has-text("Continue")',
+    'input[type="submit"]',
+  ];
+
+  let submitButton = await findFirstVisible(page, submitSelectors);
+  if (submitButton) {
+    log("[stellar-session] Clicking submit button...");
+    await submitButton.click();
+  } else {
+    log("[stellar-session] No submit button found, pressing Enter...");
+    await inputField.press("Enter");
+  }
+
+  // Wait for next step
+  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+
+  // Step 2: Check for password field (multi-step login)
+  const passwordSelectors = [
+    'input[type="password"]',
     'input[name="pf.pass"]',
     'input[name="password"]',
-    'input[type="password"]',
+    'label:has-text("Password") + div input',
     'input[autocomplete="current-password"]',
-    '#password',
   ];
 
-  let usernameField = await findFirstVisible(page, usernameSelector);
-  let passwordField = await findFirstVisible(page, passwordSelector);
+  let passwordField = await findFirstVisible(page, passwordSelectors);
 
-  if (usernameField || passwordField) {
-    const username = process.env.STELLARMLS_USERNAME;
-    const password = process.env.STELLARMLS_PASSWORD;
-
-    if (!username || !password) {
-      throw new PlaywrightError("Missing STELLARMLS_USERNAME or STELLARMLS_PASSWORD");
-    }
-
-    if (usernameField && !passwordField) {
-      await usernameField.fill(username, { timeout: 10000 });
-      const submitButton = await findFirstVisible(page, [
-        'button[type="submit"]',
-        'input[type="submit"]',
-        'button:has-text("Next")',
-        'button:has-text("Continue")',
-      ]);
-      if (submitButton) {
-        await submitButton.click();
-      } else {
-        await usernameField.press("Enter");
-      }
-
-      await page.waitForLoadState("domcontentloaded", { timeout: 45000 }).catch(() => undefined);
-      passwordField = await findFirstVisible(page, passwordSelector);
-    }
-
-    if (passwordField) {
-      if (!usernameField) {
-        usernameField = await findFirstVisible(page, usernameSelector);
-        if (usernameField) {
-          await usernameField.fill(username, { timeout: 10000 });
-        }
-      }
-
-      await passwordField.fill(password, { timeout: 10000 });
-
-      const submitButton = await findFirstVisible(page, [
-        'button[type="submit"]',
-        'input[type="submit"]',
-        'button:has-text("Sign On")',
-        'button:has-text("Log In")',
-        'button:has-text("Sign In")',
-      ]);
-
-      if (submitButton) {
-        await submitButton.click();
-      } else {
-        await passwordField.press("Enter");
-      }
-
-      await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => undefined);
-    }
+  // If no password field, check if we're on a different step or need to wait
+  if (!passwordField) {
+    log("[stellar-session] Waiting for password field...");
+    await page.waitForSelector('input[type="password"]', { timeout: 10000 }).catch(() => {});
+    passwordField = await findFirstVisible(page, passwordSelectors);
   }
 
+  if (passwordField) {
+    log("[stellar-session] Entering password...");
+    await passwordField.fill(password, { timeout: 10000 });
+
+    submitButton = await findFirstVisible(page, submitSelectors);
+    if (submitButton) {
+      await submitButton.click();
+    } else {
+      await passwordField.press("Enter");
+    }
+
+    await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {});
+  }
+
+  // Check for MFA prompt using improved detection
   const postLoginHtml = await page.content().catch(() => "");
-  const lowerHtml = postLoginHtml.toLowerCase();
-  if (
-    lowerHtml.includes("multi-factor") ||
-    lowerHtml.includes("verification code") ||
-    lowerHtml.includes("one-time") ||
-    lowerHtml.includes("mfa")
-  ) {
-    throw new PlaywrightError("MFA required for StellarMLS login");
+  const mfaCheck = detectMfaRequired(postLoginHtml);
+  if (mfaCheck.required) {
+    throw new PlaywrightError(`MFA required for StellarMLS login: ${mfaCheck.reason}`);
   }
 
+  // Check for login errors
+  const lowerHtml = postLoginHtml.toLowerCase();
+  if (lowerHtml.includes("invalid") && lowerHtml.includes("credentials")) {
+    throw new PlaywrightError("Invalid credentials for StellarMLS login");
+  }
+  if (lowerHtml.includes("account locked") || lowerHtml.includes("account disabled")) {
+    throw new PlaywrightError("StellarMLS account is locked or disabled");
+  }
+
+  log("[stellar-session] Login complete, navigating to Realist...");
   await page.goto(REALIST_SAML_URL, { waitUntil: "domcontentloaded" });
 }
 

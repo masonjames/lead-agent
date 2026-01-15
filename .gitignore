@@ -50,3 +50,4 @@ next-env.d.ts
 # env files
 .env*.local
 /.test-screenshots
+/debug-output
