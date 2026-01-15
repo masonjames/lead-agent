@@ -224,6 +224,22 @@ export const parseArtifacts = pgTable("parse_artifacts", {
 ]);
 
 // ============================================================================
+// 8) External Sessions (Playwright storage state)
+// ============================================================================
+
+export const externalSessions = pgTable("external_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(),
+  accountKey: text("account_key"),
+  storageState: jsonb("storage_state").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("external_sessions_provider_account_idx").on(table.provider, table.accountKey),
+  index("external_sessions_provider_idx").on(table.provider),
+]);
+
+// ============================================================================
 // Relations
 // ============================================================================
 
@@ -355,3 +371,6 @@ export type NewParcelSale = typeof parcelSales.$inferInsert;
 
 export type ParseArtifact = typeof parseArtifacts.$inferSelect;
 export type NewParseArtifact = typeof parseArtifacts.$inferInsert;
+
+export type ExternalSession = typeof externalSessions.$inferSelect;
+export type NewExternalSession = typeof externalSessions.$inferInsert;

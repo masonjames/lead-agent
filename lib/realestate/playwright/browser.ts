@@ -6,7 +6,13 @@
  */
 
 import "server-only";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type Page,
+} from "playwright-core";
 
 export type PlaywrightBrowserMode = "stealth" | "remote" | "local" | "auto";
 
@@ -20,6 +26,8 @@ export interface PlaywrightBrowserConfig {
   opTimeoutMs?: number;
   userAgent?: string;
   headless?: boolean;
+  storageState?: BrowserContextOptions["storageState"];
+  extraHTTPHeaders?: BrowserContextOptions["extraHTTPHeaders"];
 }
 
 // Configuration from environment
@@ -271,12 +279,11 @@ export async function closeBrowser(): Promise<void> {
 }
 
 /**
- * Execute a function with a new page, handling context creation and cleanup
- * This is the primary API for running Playwright operations
+ * Execute a function with a new browser context, handling creation and cleanup
  * Includes retry logic for connection failures during operation
  */
-export async function withPage<T>(
-  fn: (page: Page, context: BrowserContext) => Promise<T>,
+export async function withContext<T>(
+  fn: (context: BrowserContext) => Promise<T>,
   config?: PlaywrightBrowserConfig
 ): Promise<T> {
   const navTimeout = config?.navTimeoutMs || DEFAULT_NAV_TIMEOUT_MS;
@@ -298,6 +305,8 @@ export async function withPage<T>(
         locale: "en-US",
         timezoneId: "America/New_York",
         viewport: { width: 1920, height: 1080 },
+        storageState: config?.storageState,
+        extraHTTPHeaders: config?.extraHTTPHeaders,
         // Avoid some detection techniques
         javaScriptEnabled: true,
         ignoreHTTPSErrors: true,
@@ -307,9 +316,7 @@ export async function withPage<T>(
       context.setDefaultTimeout(opTimeout);
       context.setDefaultNavigationTimeout(navTimeout);
 
-      const page = await context.newPage();
-
-      const result = await fn(page, context);
+      const result = await fn(context);
 
       // Close context on success
       try {
@@ -342,7 +349,9 @@ export async function withPage<T>(
 
       // Only retry on connection errors
       if (isConnectionError && attempt < maxRetries) {
-        console.warn(`[Playwright] Operation failed due to connection error, retrying (attempt ${attempt}/${maxRetries})...`);
+        console.warn(
+          `[Playwright] Operation failed due to connection error, retrying (attempt ${attempt}/${maxRetries})...`
+        );
         // Reset browser instance to force reconnection
         browserInstance = null;
         browserConnectionPromise = null;
@@ -356,7 +365,22 @@ export async function withPage<T>(
   }
 
   // Should not reach here, but satisfy TypeScript
-  throw lastError || new Error("withPage failed without error");
+  throw lastError || new Error("withContext failed without error");
+}
+
+/**
+ * Execute a function with a new page, handling context creation and cleanup
+ * This is the primary API for running Playwright operations
+ * Includes retry logic for connection failures during operation
+ */
+export async function withPage<T>(
+  fn: (page: Page, context: BrowserContext) => Promise<T>,
+  config?: PlaywrightBrowserConfig
+): Promise<T> {
+  return withContext(async (context) => {
+    const page = await context.newPage();
+    return fn(page, context);
+  }, config);
 }
 
 /**

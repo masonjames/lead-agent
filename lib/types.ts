@@ -171,6 +171,7 @@ export const enrichmentDataSchema = z.object({
   pao: enrichmentSectionSchema.default({ status: 'PENDING' }),
   exa: enrichmentSectionSchema.default({ status: 'PENDING' }),
   demographics: enrichmentSectionSchema.default({ status: 'PENDING' }),
+  stellarRealist: enrichmentSectionSchema.default({ status: 'PENDING' }),
 });
 export type EnrichmentData = z.infer<typeof enrichmentDataSchema>;
 
@@ -213,6 +214,7 @@ export const leadReportSchema = z.object({
     pao: { status: 'PENDING' },
     exa: { status: 'PENDING' },
     demographics: { status: 'PENDING' },
+    stellarRealist: { status: 'PENDING' },
   }),
   
   // Scoring

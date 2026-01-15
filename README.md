@@ -7,6 +7,7 @@ An inbound lead qualification and property research app built with Next.js and W
 - Contact-form lead capture (API + UI)
 - Optional Meta/Facebook Lead Ads webhook ingestion
 - Property Appraiser (PAO) scraping for Manatee/Sarasota counties
+- StellarMLS (Realist) enrichment via Playwright SSO
 - Web research via Exa
 - ZIP-based demographics enrichment
 - Lead scoring and report email delivery
@@ -28,6 +29,7 @@ Lead Sources
 │  └─ workflowInbound
 │     ├─ stepInitializeReport
 │     ├─ stepEnrichPao
+│     ├─ stepEnrichStellarRealist
 │     ├─ stepEnrichExa
 │     ├─ stepEnrichDemographics
 │     ├─ stepScoreLead
@@ -37,6 +39,7 @@ Lead Sources
    └─ workflowMetaLead
       ├─ stepInitializeReport
       ├─ stepEnrichPao
+      ├─ stepEnrichStellarRealist
       ├─ stepEnrichExa
       ├─ stepEnrichDemographics
       ├─ stepScoreLead
@@ -85,6 +88,26 @@ PLAYWRIGHT_CDP_ENDPOINT=wss://<your-cdp-endpoint>
 # PLAYWRIGHT_MODE=local
 ```
 
+StellarMLS / Realist (SSO session reuse):
+```bash
+STELLARMLS_PING_AUTHORIZE_URL=...
+STELLARMLS_USERNAME=...
+STELLARMLS_PASSWORD=...
+
+# Provide storageState to reuse sessions in serverless
+STELLARMLS_STORAGE_STATE_JSON=...
+# or
+STELLARMLS_STORAGE_STATE_B64=...
+
+# Optional: pull session state from a service
+STELLARMLS_SESSION_INFO_URL=...
+STELLARMLS_SESSION_INFO_JWT=...
+
+# Optional: persist refreshed session in Neon
+STELLARMLS_SESSION_DB_ENABLED=false
+STELLARMLS_SESSION_ACCOUNT_KEY=
+```
+
 Database (parcel ingestion):
 ```bash
 DATABASE_URL=...
@@ -120,6 +143,10 @@ lead-agent/
 ## Notes on Playwright stealth CDP
 
 All scraping runs through a shared browser manager that defaults to stealth CDP mode. Set `PLAYWRIGHT_CDP_ENDPOINT` to your CDP provider (e.g., Browserless, SeleniumBase CDP). In local development, you can set `PLAYWRIGHT_MODE=local` to launch Chromium directly.
+
+## StellarMLS session reuse
+
+StellarMLS enrichment uses Playwright storageState for session reuse. Provide `STELLARMLS_STORAGE_STATE_JSON` or `STELLARMLS_STORAGE_STATE_B64` to avoid interactive login in serverless, or supply `STELLARMLS_SESSION_INFO_URL` with a JWT to fetch session state from another service. If `STELLARMLS_SESSION_DB_ENABLED=true` and `DATABASE_URL` is set, refreshed sessions are stored in Neon for automatic reuse. Treat storageState values as secrets.
 
 ## License
 

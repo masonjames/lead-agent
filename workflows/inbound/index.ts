@@ -15,6 +15,7 @@ import type { FormSchema } from "@/lib/types";
 import {
   stepInitializeReport,
   stepEnrichPao,
+  stepEnrichStellarRealist,
   stepEnrichExa,
   stepEnrichDemographics,
   stepScoreLead,
@@ -54,13 +55,16 @@ export const workflowInbound = async (
     // Step 3: Enrich with PAO data (property lookup) if address provided
     report = await stepEnrichPao(report);
 
-    // Step 4: Enrich with Exa web research
+    // Step 4: Enrich with StellarMLS (Realist)
+    report = await stepEnrichStellarRealist(report);
+
+    // Step 5: Enrich with Exa web research
     report = await stepEnrichExa(report);
 
-    // Step 5: Enrich with demographics
+    // Step 6: Enrich with demographics
     report = await stepEnrichDemographics(report);
 
-    // Step 6: Score and assign business status
+    // Step 7: Score and assign business status
     const { report: scoredReport, scoreBreakdown } = await stepScoreLead(report);
     report = scoredReport;
 
@@ -108,6 +112,7 @@ export const workflowInbound = async (
 export {
   stepInitializeReport,
   stepEnrichPao,
+  stepEnrichStellarRealist,
   stepEnrichExa,
   stepEnrichDemographics,
   stepScoreLead,

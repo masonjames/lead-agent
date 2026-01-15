@@ -6,6 +6,7 @@
 import { enrichPaoByAddress } from "@/lib/enrichment/pao";
 import { enrichWithExa } from "@/lib/enrichment/exa";
 import { getDemographicInsights } from "@/lib/enrichment/demographics";
+import { enrichStellarRealistByAddress } from "@/lib/enrichment/stellar";
 import {
   calculateLeadScore,
   tierToBusinessStatus,
@@ -82,6 +83,7 @@ interface WorkflowReport {
       category?: string;
       matchScore?: number;
     }>;
+    stellarRealist?: import("@/lib/realestate/stellar/realist.playwright").StellarRealistData;
   };
   score?: {
     value: number;
@@ -203,6 +205,69 @@ export const stepEnrichPao = async (
     provenance: {
       ...report.provenance,
       property: paoResult.provenance,
+    },
+  };
+};
+
+/**
+ * Step: Enrich with StellarMLS (Realist)
+ */
+export const stepEnrichStellarRealist = async (
+  report: WorkflowReport
+): Promise<WorkflowReport> => {
+  "use step";
+
+  const address = report.property?.address || report.contact?.address;
+
+  if (!address) {
+    console.log(`[Meta Workflow] No address provided, skipping StellarMLS enrichment`);
+    return {
+      ...report,
+      provenance: {
+        ...report.provenance,
+        stellarRealist: {
+          source: "stellar_skipped",
+          fetchedAt: new Date().toISOString(),
+          confidence: 0,
+          reason: "No address provided",
+        },
+      },
+    };
+  }
+
+  console.log(`[Meta Workflow] Enriching StellarMLS for address: ${address}`);
+
+  const stellarResult = await enrichStellarRealistByAddress({
+    address,
+    timeoutMs: 90000,
+    navTimeoutMs: 45000,
+  });
+
+  if (stellarResult.status === "SUCCESS" && stellarResult.data) {
+    return {
+      ...report,
+      enrichment: {
+        ...report.enrichment,
+        stellarRealist: stellarResult.data,
+      },
+      provenance: {
+        ...report.provenance,
+        stellarRealist: stellarResult.provenance,
+      },
+    };
+  }
+
+  console.log(
+    `[Meta Workflow] StellarMLS enrichment failed or skipped: ${
+      stellarResult.error || stellarResult.status
+    }`
+  );
+
+  return {
+    ...report,
+    provenance: {
+      ...report.provenance,
+      stellarRealist: stellarResult.provenance,
     },
   };
 };

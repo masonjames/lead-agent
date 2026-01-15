@@ -70,6 +70,7 @@ export interface RenderableReport {
       category?: string;
       matchScore?: number;
     }>;
+    stellarRealist?: import("@/lib/realestate/stellar/realist.playwright").StellarRealistData;
   };
   score?: {
     value: number;
@@ -347,6 +348,38 @@ export function renderReportHtml(params: RenderReportParams): string {
       </div>
     </div>
     ` : ""}
+    ${enrichment.stellarRealist ? `
+    <h3 style="margin-top: 12px;">StellarMLS (Realist)</h3>
+    <div class="grid">
+      <div>
+        <div class="label">Sell Score</div>
+        <div class="value">${enrichment.stellarRealist.sellScore?.score ?? "N/A"}${enrichment.stellarRealist.sellScore?.indicator ? ` (${enrichment.stellarRealist.sellScore.indicator})` : ""}</div>
+      </div>
+      <div>
+        <div class="label">RealAVM</div>
+        <div class="value">${formatCurrency(enrichment.stellarRealist.realAvm?.value)}</div>
+      </div>
+      <div>
+        <div class="label">AVM Confidence</div>
+        <div class="value">${enrichment.stellarRealist.realAvm?.confidence ? `${enrichment.stellarRealist.realAvm.confidence}%` : enrichment.stellarRealist.realAvm?.confidenceLabel || "N/A"}</div>
+      </div>
+      <div>
+        <div class="label">Current Rent</div>
+        <div class="value">${formatCurrency(enrichment.stellarRealist.rentalTrends?.currentRent)}</div>
+      </div>
+    </div>
+    ${enrichment.stellarRealist.listings?.length ? `
+    <div style="margin-top: 8px;">
+      <div style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Listings</div>
+      ${enrichment.stellarRealist.listings.slice(0, 3).map((listing) => `
+        <div style="padding: 4px 0; font-size: 13px; color: #374151;">
+          ${listing.status || "Listing"} — ${formatCurrency(listing.listPrice || listing.closePrice)}
+          ${listing.listDate ? ` (${formatDate(listing.listDate)})` : ""}
+        </div>
+      `).join("")}
+    </div>
+    ` : ""}
+    ` : ""}
     ${enrichment.publicProfiles?.length ? `
     <h3 style="margin-top: 12px;">Public Profiles${enrichment.nameIsAmbiguous ? ` <span style="color: #f59e0b; font-size: 11px; font-weight: normal;">(multiple candidates)</span>` : ""}</h3>
     ${enrichment.nameIsAmbiguous && enrichment.disambiguationNote ? `<div style="background: #fef3c7; padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #92400e; margin-bottom: 12px;">⚠️ ${enrichment.disambiguationNote}</div>` : ""}
@@ -493,6 +526,27 @@ export function renderReportText(params: RenderReportParams): string {
       `Median Income: ${formatCurrency(enrichment.demographics.medianIncome)}`,
       `Median Home Value: ${formatCurrency(enrichment.demographics.medianHomeValue)}`
     );
+  }
+
+  if (enrichment?.stellarRealist) {
+    const stellar = enrichment.stellarRealist;
+    lines.push(
+      ``,
+      `--- STELLARMLS (REALIST) ---`,
+      `Sell Score: ${stellar.sellScore?.score ?? "N/A"}${stellar.sellScore?.indicator ? ` (${stellar.sellScore.indicator})` : ""}`,
+      `RealAVM: ${formatCurrency(stellar.realAvm?.value)}`,
+      `AVM Confidence: ${stellar.realAvm?.confidence ? `${stellar.realAvm.confidence}%` : stellar.realAvm?.confidenceLabel || "N/A"}`,
+      `Current Rent: ${formatCurrency(stellar.rentalTrends?.currentRent)}`
+    );
+
+    if (stellar.listings?.length) {
+      lines.push(`Listings:`);
+      for (const listing of stellar.listings.slice(0, 3)) {
+        lines.push(
+          `  ${listing.status || "Listing"} - ${formatCurrency(listing.listPrice || listing.closePrice)}`
+        );
+      }
+    }
   }
 
   if (enrichment?.publicProfiles?.length) {
