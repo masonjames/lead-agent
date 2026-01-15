@@ -17,10 +17,15 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config(); // Load .env file as fallback
 
-import { chromium, type Browser, type Page } from "playwright-core";
+import type { Browser, Page } from "playwright-core";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import {
+  canUsePlaywrightInThisEnv,
+  getBrowser,
+  PlaywrightError,
+} from "../lib/realestate/playwright/browser";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,8 +33,6 @@ const __dirname = dirname(__filename);
 // ============================================================================
 // Configuration
 // ============================================================================
-
-const PLAYWRIGHT_WS_ENDPOINT = process.env.PLAYWRIGHT_WS_ENDPOINT;
 
 interface TestAddress {
   address: string;
@@ -194,19 +197,25 @@ async function savePageHtml(page: Page, name: string, debugMode: boolean): Promi
 // ============================================================================
 
 async function connectToBrowser(): Promise<Browser> {
-  if (!PLAYWRIGHT_WS_ENDPOINT) {
-    throw new Error("PLAYWRIGHT_WS_ENDPOINT environment variable not set");
+  log(`\n${colors.cyan}Connecting to browser...${colors.reset}`);
+  const mode = process.env.PLAYWRIGHT_MODE || "stealth";
+  const endpoint = process.env.PLAYWRIGHT_CDP_ENDPOINT || process.env.PLAYWRIGHT_WS_ENDPOINT;
+
+  logStep(`Mode: ${mode}`);
+  if (endpoint) {
+    logStep(`Endpoint: ${endpoint.substring(0, 50)}...`);
   }
 
-  log(`\n${colors.cyan}Connecting to browser...${colors.reset}`);
-  logStep(`Endpoint: ${PLAYWRIGHT_WS_ENDPOINT.substring(0, 50)}...`);
-
-  const browser = await chromium.connectOverCDP(PLAYWRIGHT_WS_ENDPOINT, {
-    timeout: 30000,
-  });
-
-  logSuccess("Connected to remote browser");
-  return browser;
+  try {
+    const browser = await getBrowser({ opTimeoutMs: 30000 });
+    logSuccess("Connected to browser");
+    return browser;
+  } catch (error) {
+    if (error instanceof PlaywrightError && error.code === "CONFIG_MISSING") {
+      throw new Error(error.message);
+    }
+    throw error;
+  }
 }
 
 // ============================================================================
@@ -470,10 +479,11 @@ async function runTests(): Promise<void> {
     log(`${colors.yellow}Debug mode enabled - screenshots will be saved${colors.reset}`);
   }
 
-  // Check for Playwright endpoint
-  if (!PLAYWRIGHT_WS_ENDPOINT) {
-    log(`\n${colors.red}ERROR: PLAYWRIGHT_WS_ENDPOINT environment variable not set${colors.reset}`);
-    log(`${colors.dim}This is required to connect to the remote browser service.${colors.reset}`);
+  // Check for Playwright configuration
+  const playwrightCheck = canUsePlaywrightInThisEnv();
+  if (!playwrightCheck.ok) {
+    log(`\n${colors.red}ERROR: ${playwrightCheck.reason || "Playwright not configured"}${colors.reset}`);
+    log(`${colors.dim}Set PLAYWRIGHT_CDP_ENDPOINT (or legacy PLAYWRIGHT_WS_ENDPOINT) or use PLAYWRIGHT_MODE=local.${colors.reset}`);
     process.exit(1);
   }
 

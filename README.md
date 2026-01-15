@@ -110,8 +110,12 @@ META_APP_SECRET=your-meta-app-secret
 META_ACCESS_TOKEN=your-meta-access-token
 META_VERIFY_TOKEN=your-webhook-verify-token
 
-# Optional - Remote browser for PAO scraping
-PLAYWRIGHT_WS_ENDPOINT=wss://your-browser-service
+# Optional - Stealth CDP browser for PAO scraping
+PLAYWRIGHT_MODE=stealth
+PLAYWRIGHT_CDP_ENDPOINT=http://127.0.0.1:9222
+# Set PLAYWRIGHT_MODE=local to use a local Chromium browser in development
+# (Legacy alias still supported)
+# PLAYWRIGHT_WS_ENDPOINT=wss://your-browser-service
 ```
 
 4. Run the development server:

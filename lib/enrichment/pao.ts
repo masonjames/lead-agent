@@ -287,6 +287,11 @@ export async function enrichPaoByAddress(params: {
         };
       }
 
+      // Configuration errors should be treated as workflow-safe skips
+      if (error instanceof PlaywrightError && error.code === "CONFIG_MISSING") {
+        return makeResult("SKIPPED", source, error.message, { errorCode: error.code, source });
+      }
+
       // For browser launch failures in development, skip
       if (error instanceof PlaywrightError && error.code === "BROWSER_LAUNCH_FAILED") {
         const isProduction = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
@@ -294,7 +299,7 @@ export async function enrichPaoByAddress(params: {
           return makeResult(
             "SKIPPED",
             source,
-            "Playwright browser not available in development (no PLAYWRIGHT_WS_ENDPOINT)"
+            "Playwright browser not available in development (set PLAYWRIGHT_CDP_ENDPOINT or PLAYWRIGHT_MODE=local)"
           );
         }
       }

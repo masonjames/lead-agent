@@ -8,8 +8,24 @@
 import "server-only";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
 
+export type PlaywrightBrowserMode = "stealth" | "remote" | "local" | "auto";
+
+export interface PlaywrightBrowserConfig {
+  /** Preferred CDP endpoint (SeleniumBase stealth, browserless, etc.) */
+  cdpEndpoint?: string;
+  /** Back-compat alias (deprecated) */
+  wsEndpoint?: string;
+  mode?: PlaywrightBrowserMode;
+  navTimeoutMs?: number;
+  opTimeoutMs?: number;
+  userAgent?: string;
+  headless?: boolean;
+}
+
 // Configuration from environment
-const PLAYWRIGHT_WS_ENDPOINT = process.env.PLAYWRIGHT_WS_ENDPOINT;
+const PLAYWRIGHT_MODE = (process.env.PLAYWRIGHT_MODE || "stealth") as PlaywrightBrowserMode;
+const PLAYWRIGHT_CDP_ENDPOINT =
+  process.env.PLAYWRIGHT_CDP_ENDPOINT || process.env.PLAYWRIGHT_WS_ENDPOINT;
 const PLAYWRIGHT_HEADLESS = process.env.PLAYWRIGHT_HEADLESS !== "false";
 const DEFAULT_NAV_TIMEOUT_MS = parseInt(process.env.PAO_NAV_TIMEOUT_MS || "45000", 10);
 const DEFAULT_OP_TIMEOUT_MS = parseInt(process.env.PAO_SCRAPE_TIMEOUT_MS || "60000", 10);
@@ -22,17 +38,6 @@ let browserConnectionPromise: Promise<Browser> | null = null;
 const MAX_CONNECTION_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const CONNECTION_TIMEOUT_MS = 30000;
-
-export type PlaywrightBrowserMode = "remote" | "local" | "auto";
-
-export interface PlaywrightBrowserConfig {
-  wsEndpoint?: string;
-  mode?: PlaywrightBrowserMode;
-  navTimeoutMs?: number;
-  opTimeoutMs?: number;
-  userAgent?: string;
-  headless?: boolean;
-}
 
 /**
  * Hardened launch arguments for local Chromium
@@ -56,23 +61,74 @@ const HARDENED_LAUNCH_ARGS = [
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
+function isProductionEnv(): boolean {
+  return process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+}
+
+function normalizeMode(mode?: PlaywrightBrowserMode): PlaywrightBrowserMode {
+  const resolved = mode || PLAYWRIGHT_MODE || "stealth";
+  return resolved === "remote" ? "stealth" : resolved;
+}
+
+function resolveMode(config?: PlaywrightBrowserConfig): PlaywrightBrowserMode {
+  return normalizeMode(config?.mode);
+}
+
+function resolveCdpEndpoint(config?: PlaywrightBrowserConfig): string | undefined {
+  return config?.cdpEndpoint || config?.wsEndpoint || PLAYWRIGHT_CDP_ENDPOINT;
+}
+
+function modeRequiresCdp(mode: PlaywrightBrowserMode): boolean {
+  return mode === "stealth" || mode === "remote";
+}
+
+function requireCdpEndpoint(config?: PlaywrightBrowserConfig): string {
+  const endpoint = resolveCdpEndpoint(config);
+  if (!endpoint) {
+    throw new PlaywrightError(
+      "Missing PLAYWRIGHT_CDP_ENDPOINT (or legacy PLAYWRIGHT_WS_ENDPOINT) while PLAYWRIGHT_MODE requires CDP. Set PLAYWRIGHT_MODE=local to use a local browser in development.",
+      "CONFIG_MISSING"
+    );
+  }
+  return endpoint;
+}
+
 /**
  * Check if Playwright is configured and available for use in this environment
- * 
+ *
  * @returns Object with ok status and optional reason if not configured
  */
-export function canUsePlaywrightInThisEnv(): { ok: boolean; reason?: string } {
-  const isProduction = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-  
-  // In production (Vercel), require remote WS endpoint
-  if (isProduction && !PLAYWRIGHT_WS_ENDPOINT) {
+export function canUsePlaywrightInThisEnv(
+  config?: Pick<PlaywrightBrowserConfig, "mode" | "cdpEndpoint" | "wsEndpoint">
+): { ok: boolean; reason?: string } {
+  const mode = resolveMode(config);
+  const isProduction = isProductionEnv();
+  const endpoint = resolveCdpEndpoint(config);
+
+  if (mode === "local") {
+    if (isProduction) {
+      return { ok: false, reason: "PLAYWRIGHT_MODE=local is not allowed in production" };
+    }
+    return { ok: true };
+  }
+
+  if (mode === "auto") {
+    if (endpoint) {
+      return { ok: true };
+    }
+    if (isProduction) {
+      return { ok: false, reason: "PLAYWRIGHT_CDP_ENDPOINT not set for production" };
+    }
+    return { ok: true };
+  }
+
+  if (!endpoint) {
     return {
       ok: false,
-      reason: "PLAYWRIGHT_WS_ENDPOINT not set - remote browser required in production",
+      reason: "PLAYWRIGHT_CDP_ENDPOINT not set (PLAYWRIGHT_MODE=stealth requires CDP)",
     };
   }
-  
-  // In development, always allow (will attempt local launch)
+
   return { ok: true };
 }
 
@@ -87,7 +143,7 @@ async function sleep(ms: number): Promise<void> {
  * Connect to remote browser with retry logic
  */
 async function connectWithRetry(
-  wsEndpoint: string,
+  cdpEndpoint: string,
   timeout: number,
   maxRetries: number = MAX_CONNECTION_RETRIES
 ): Promise<Browser> {
@@ -99,7 +155,7 @@ async function connectWithRetry(
 
       // Use connectOverCDP for Browserless.io and similar services
       // This is the recommended method for CDP-based browser services
-      const browser = await chromium.connectOverCDP(wsEndpoint);
+      const browser = await chromium.connectOverCDP(cdpEndpoint, { timeout });
 
       console.log(`[Playwright] Connected to remote browser on attempt ${attempt}`);
       return browser;
@@ -128,11 +184,25 @@ async function connectWithRetry(
  * Uses singleton pattern for connection reuse with retry logic
  */
 export async function getBrowser(config?: PlaywrightBrowserConfig): Promise<Browser> {
-  const wsEndpoint = config?.wsEndpoint || PLAYWRIGHT_WS_ENDPOINT;
-  const mode = config?.mode || "auto";
+  const mode = resolveMode(config);
+  const endpoint = resolveCdpEndpoint(config);
+
+  if (isProductionEnv() && mode === "local") {
+    throw new PlaywrightError(
+      "PLAYWRIGHT_MODE=local is not allowed in production",
+      "CONFIG_MISSING"
+    );
+  }
+
+  if (isProductionEnv() && mode === "auto" && !endpoint) {
+    throw new PlaywrightError(
+      "PLAYWRIGHT_CDP_ENDPOINT not set for production",
+      "CONFIG_MISSING"
+    );
+  }
 
   // Determine connection mode
-  const useRemote = mode === "remote" || (mode === "auto" && wsEndpoint);
+  const useRemote = modeRequiresCdp(mode) || (mode === "auto" && endpoint);
 
   // Check if existing browser is still connected
   if (browserInstance?.isConnected()) {
@@ -153,10 +223,11 @@ export async function getBrowser(config?: PlaywrightBrowserConfig): Promise<Brow
 
   browserConnectionPromise = (async () => {
     try {
-      if (useRemote && wsEndpoint) {
-        console.log("[Playwright] Connecting to remote browser:", wsEndpoint.substring(0, 50) + "...");
+      if (useRemote) {
+        const cdpEndpoint = requireCdpEndpoint(config);
+        console.log("[Playwright] Connecting to remote browser:", cdpEndpoint.substring(0, 50) + "...");
         browserInstance = await connectWithRetry(
-          wsEndpoint,
+          cdpEndpoint,
           config?.opTimeoutMs || CONNECTION_TIMEOUT_MS
         );
       } else {
@@ -294,15 +365,18 @@ export async function withPage<T>(
  * For remote mode, checks if endpoint is configured
  */
 export function isPlaywrightConfigured(mode?: PlaywrightBrowserMode): boolean {
-  const effectiveMode = mode || "auto";
-  
-  if (effectiveMode === "remote") {
-    return !!PLAYWRIGHT_WS_ENDPOINT;
+  const effectiveMode = normalizeMode(mode);
+  const endpoint = resolveCdpEndpoint();
+
+  if (effectiveMode === "local") {
+    return !isProductionEnv();
   }
-  
-  // Local and auto modes are always considered "configured"
-  // (may fail at runtime if Chromium isn't installed)
-  return true;
+
+  if (effectiveMode === "auto") {
+    return !isProductionEnv() || Boolean(endpoint);
+  }
+
+  return Boolean(endpoint);
 }
 
 /**
@@ -311,7 +385,13 @@ export function isPlaywrightConfigured(mode?: PlaywrightBrowserMode): boolean {
 export class PlaywrightError extends Error {
   constructor(
     message: string,
-    public readonly code: "BROWSER_LAUNCH_FAILED" | "NAVIGATION_FAILED" | "TIMEOUT" | "BLOCKED" | "PARSE_ERROR",
+    public readonly code:
+      | "CONFIG_MISSING"
+      | "BROWSER_LAUNCH_FAILED"
+      | "NAVIGATION_FAILED"
+      | "TIMEOUT"
+      | "BLOCKED"
+      | "PARSE_ERROR",
     public readonly cause?: unknown
   ) {
     super(message);

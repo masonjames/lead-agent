@@ -943,6 +943,10 @@ export async function scrapeManateePaoPropertyByAddressPlaywright(
       throw error;
     }
 
+    if (error instanceof PlaywrightError && error.code === "CONFIG_MISSING") {
+      throw error;
+    }
+
     return {
       detailUrl: null,
       scraped: {},
@@ -986,6 +990,10 @@ export async function extractManateePaoPropertyPlaywright(
     debug.success = false;
 
     console.error("[PAO Playwright] Extraction failed:", debug.error);
+
+    if (error instanceof PlaywrightError && error.code === "CONFIG_MISSING") {
+      throw error;
+    }
 
     return { scraped: {}, debug };
   }

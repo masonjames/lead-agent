@@ -21,7 +21,6 @@ import type {
 } from "../../adapters/types";
 import type { PropertyDetails } from "@/lib/realestate/property-types";
 import {
-  withPage,
   canUsePlaywrightInThisEnv,
   PlaywrightError,
 } from "@/lib/realestate/playwright/browser";
