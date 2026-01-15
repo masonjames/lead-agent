@@ -24,7 +24,7 @@ export interface SendReportEmailParams {
   subject: string;
   html: string;
   text?: string;
-  to?: string;
+  to?: string | string[];
   from?: string;
   replyTo?: string;
   tags?: Array<{ name: string; value: string }>;
@@ -52,12 +52,22 @@ export async function sendReportEmail(
     tags,
   } = params;
 
+  // Normalize recipients to array and filter out empty strings
+  const recipients = (Array.isArray(to) ? to : [to]).filter(email => email && email.trim() !== '');
+
+  if (recipients.length === 0) {
+    return {
+      success: false,
+      error: "No valid recipients provided",
+    };
+  }
+
   try {
     const client = getResendClient();
 
     const response = await client.emails.send({
       from,
-      to: [to],
+      to: recipients,
       subject,
       html,
       text,

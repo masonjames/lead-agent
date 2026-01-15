@@ -23,10 +23,16 @@ export const formSchema = z.object({
     .max(200, 'Address must be less than 200 characters.')
     .optional()
     .or(z.literal('')),
+  recipientEmail: z
+    .string()
+    .email('Please enter a valid email address.')
+    .optional()
+    .or(z.literal('')),
   message: z
     .string()
-    .min(10, 'Message is required')
     .max(500, 'Message must be less than 500 characters.')
+    .optional()
+    .or(z.literal(''))
 });
 
 export type FormSchema = z.infer<typeof formSchema>;

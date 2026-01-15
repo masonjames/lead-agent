@@ -14,7 +14,6 @@ import {
   FieldSet
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { formSchema } from '@/lib/types';
 import { toast } from 'sonner';
 
@@ -27,6 +26,7 @@ export function LeadForm() {
       phone: '',
       company: '',
       address: '',
+      recipientEmail: '',
       message: ''
     }
   });
@@ -170,33 +170,23 @@ export function LeadForm() {
                 </Field>
               )}
             />
-          </FieldGroup>
-        </FieldSet>
 
-        <FieldSet>
-          <FieldLegend>Your Message</FieldLegend>
-          <FieldDescription>
-            Tell us about your project or inquiry.
-          </FieldDescription>
-          <FieldGroup>
             <Controller
-              name="message"
+              name="recipientEmail"
               control={form.control}
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="message">
-                    Message <span className="text-destructive">*</span>
-                  </FieldLabel>
-                  <Textarea
+                  <FieldLabel htmlFor="recipientEmail">Send me the results</FieldLabel>
+                  <Input
                     {...field}
-                    id="message"
+                    id="recipientEmail"
+                    type="email"
                     aria-invalid={fieldState.invalid}
-                    placeholder="Tell us about your project or inquiry..."
-                    rows={6}
-                    className="resize-none"
+                    placeholder="your@email.com"
+                    autoComplete="email"
                   />
                   <FieldDescription>
-                    {field.value.length}/500 characters
+                    Optional: Enter your email to receive a copy of the property report.
                   </FieldDescription>
                   {fieldState.invalid && (
                     <FieldError errors={[fieldState.error]} />
@@ -207,10 +197,7 @@ export function LeadForm() {
           </FieldGroup>
         </FieldSet>
 
-        <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={() => form.reset()}>
-            Reset
-          </Button>
+        <div className="flex justify-end">
           <Button type="submit" disabled={form.formState.isSubmitting}>
             {form.formState.isSubmitting ? 'Submitting...' : 'Submit'}
           </Button>

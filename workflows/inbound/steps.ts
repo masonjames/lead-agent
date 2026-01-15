@@ -11,7 +11,7 @@ import {
   tierToBusinessStatus,
   type ScoreBreakdown,
 } from "@/lib/scoring";
-import { sendReportEmail, isResendConfigured } from "@/lib/email/resend";
+import { sendReportEmail, isResendConfigured, getReportRecipient } from "@/lib/email/resend";
 import {
   renderReportHtml,
   renderReportText,
@@ -36,6 +36,7 @@ export interface WorkflowReport {
   processingStatus: string;
   businessStatus: string;
   receivedAt: string;
+  recipientEmail?: string;
   contact?: {
     name?: string;
     email?: string;
@@ -118,6 +119,7 @@ export const stepInitializeReport = async (
     processingStatus: "RECEIVED",
     businessStatus: "UNKNOWN",
     receivedAt: new Date().toISOString(),
+    recipientEmail: data.recipientEmail || undefined,
     contact: {
       name: data.name,
       email: data.email,
@@ -126,7 +128,7 @@ export const stepInitializeReport = async (
     },
     formData: {
       company: data.company || undefined,
-      message: data.message,
+      message: data.message || undefined,
     },
     provenance: {
       contact: {
@@ -514,10 +516,18 @@ export const stepSendReportEmail = async (
   const html = renderReportHtml({ report: renderReport as any, scoreBreakdown });
   const text = renderReportText({ report: renderReport as any, scoreBreakdown });
 
+  // Build recipient list: always include configured recipient, optionally add user's recipient email
+  const recipients: string[] = [getReportRecipient()];
+  if (report.recipientEmail && report.recipientEmail.trim()) {
+    recipients.push(report.recipientEmail);
+    console.log(`[Inbound Workflow] Also sending report to: ${report.recipientEmail}`);
+  }
+
   const result = await sendReportEmail({
     subject,
     html,
     text,
+    to: recipients,
     tags: [
       { name: "lead_id", value: report.leadId },
       { name: "tier", value: scoreBreakdown.tier },
@@ -526,7 +536,7 @@ export const stepSendReportEmail = async (
   });
 
   if (result.success) {
-    console.log(`[Inbound Workflow] Email sent successfully: ${result.messageId}`);
+    console.log(`[Inbound Workflow] Email sent successfully to ${recipients.length} recipient(s): ${result.messageId}`);
   } else {
     console.error(`[Inbound Workflow] Email failed: ${result.error}`);
   }
