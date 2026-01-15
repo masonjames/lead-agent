@@ -18,6 +18,11 @@ const DEFAULT_OP_TIMEOUT_MS = parseInt(process.env.PAO_SCRAPE_TIMEOUT_MS || "600
 let browserInstance: Browser | null = null;
 let browserConnectionPromise: Promise<Browser> | null = null;
 
+// Retry configuration
+const MAX_CONNECTION_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+const CONNECTION_TIMEOUT_MS = 30000;
+
 export type PlaywrightBrowserMode = "remote" | "local" | "auto";
 
 export interface PlaywrightBrowserConfig {
@@ -72,8 +77,55 @@ export function canUsePlaywrightInThisEnv(): { ok: boolean; reason?: string } {
 }
 
 /**
+ * Sleep utility for retry delays
+ */
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Connect to remote browser with retry logic
+ */
+async function connectWithRetry(
+  wsEndpoint: string,
+  timeout: number,
+  maxRetries: number = MAX_CONNECTION_RETRIES
+): Promise<Browser> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Playwright] Connection attempt ${attempt}/${maxRetries}...`);
+
+      // Use connectOverCDP for Browserless.io and similar services
+      // This is the recommended method for CDP-based browser services
+      const browser = await chromium.connectOverCDP(wsEndpoint);
+
+      console.log(`[Playwright] Connected to remote browser on attempt ${attempt}`);
+      return browser;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`[Playwright] Connection attempt ${attempt} failed: ${lastError.message}`);
+
+      // Don't retry on the last attempt
+      if (attempt < maxRetries) {
+        const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1); // Exponential backoff
+        console.log(`[Playwright] Retrying in ${delay}ms...`);
+        await sleep(delay);
+      }
+    }
+  }
+
+  throw new PlaywrightError(
+    `Failed to connect to remote browser after ${maxRetries} attempts: ${lastError?.message}`,
+    "BROWSER_LAUNCH_FAILED",
+    lastError
+  );
+}
+
+/**
  * Get or create a browser instance
- * Uses singleton pattern for connection reuse
+ * Uses singleton pattern for connection reuse with retry logic
  */
 export async function getBrowser(config?: PlaywrightBrowserConfig): Promise<Browser> {
   const wsEndpoint = config?.wsEndpoint || PLAYWRIGHT_WS_ENDPOINT;
@@ -87,6 +139,13 @@ export async function getBrowser(config?: PlaywrightBrowserConfig): Promise<Brow
     return browserInstance;
   }
 
+  // Reset if browser exists but is disconnected
+  if (browserInstance && !browserInstance.isConnected()) {
+    console.log("[Playwright] Browser disconnected, reconnecting...");
+    browserInstance = null;
+    browserConnectionPromise = null;
+  }
+
   // Avoid concurrent connection attempts
   if (browserConnectionPromise) {
     return browserConnectionPromise;
@@ -96,9 +155,10 @@ export async function getBrowser(config?: PlaywrightBrowserConfig): Promise<Brow
     try {
       if (useRemote && wsEndpoint) {
         console.log("[Playwright] Connecting to remote browser:", wsEndpoint.substring(0, 50) + "...");
-        browserInstance = await chromium.connect(wsEndpoint, {
-          timeout: config?.opTimeoutMs || DEFAULT_OP_TIMEOUT_MS,
-        });
+        browserInstance = await connectWithRetry(
+          wsEndpoint,
+          config?.opTimeoutMs || CONNECTION_TIMEOUT_MS
+        );
       } else {
         console.log("[Playwright] Launching local Chromium browser");
         browserInstance = await chromium.launch({
@@ -142,43 +202,90 @@ export async function closeBrowser(): Promise<void> {
 /**
  * Execute a function with a new page, handling context creation and cleanup
  * This is the primary API for running Playwright operations
+ * Includes retry logic for connection failures during operation
  */
 export async function withPage<T>(
   fn: (page: Page, context: BrowserContext) => Promise<T>,
   config?: PlaywrightBrowserConfig
 ): Promise<T> {
-  const browser = await getBrowser(config);
   const navTimeout = config?.navTimeoutMs || DEFAULT_NAV_TIMEOUT_MS;
   const opTimeout = config?.opTimeoutMs || DEFAULT_OP_TIMEOUT_MS;
   const userAgent = config?.userAgent || DEFAULT_USER_AGENT;
 
-  // Create a fresh browser context for isolation
-  const context = await browser.newContext({
-    userAgent,
-    locale: "en-US",
-    timezoneId: "America/New_York",
-    viewport: { width: 1920, height: 1080 },
-    // Avoid some detection techniques
-    javaScriptEnabled: true,
-    ignoreHTTPSErrors: true,
-  });
+  const maxRetries = 2; // Retry once if browser disconnects
+  let lastError: Error | null = null;
 
-  // Set default timeouts
-  context.setDefaultTimeout(opTimeout);
-  context.setDefaultNavigationTimeout(navTimeout);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let context: BrowserContext | null = null;
 
-  const page = await context.newPage();
-
-  try {
-    return await fn(page, context);
-  } finally {
-    // Always close the context to free resources
     try {
-      await context.close();
-    } catch {
-      // Ignore close errors
+      const browser = await getBrowser(config);
+
+      // Create a fresh browser context for isolation
+      context = await browser.newContext({
+        userAgent,
+        locale: "en-US",
+        timezoneId: "America/New_York",
+        viewport: { width: 1920, height: 1080 },
+        // Avoid some detection techniques
+        javaScriptEnabled: true,
+        ignoreHTTPSErrors: true,
+      });
+
+      // Set default timeouts
+      context.setDefaultTimeout(opTimeout);
+      context.setDefaultNavigationTimeout(navTimeout);
+
+      const page = await context.newPage();
+
+      const result = await fn(page, context);
+
+      // Close context on success
+      try {
+        await context.close();
+      } catch {
+        // Ignore close errors
+      }
+
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const errorMsg = lastError.message.toLowerCase();
+
+      // Check if this is a recoverable connection error
+      const isConnectionError =
+        errorMsg.includes("browser has been closed") ||
+        errorMsg.includes("target closed") ||
+        errorMsg.includes("connection refused") ||
+        errorMsg.includes("websocket error") ||
+        errorMsg.includes("disconnected");
+
+      // Always try to close the context
+      if (context) {
+        try {
+          await context.close();
+        } catch {
+          // Ignore close errors
+        }
+      }
+
+      // Only retry on connection errors
+      if (isConnectionError && attempt < maxRetries) {
+        console.warn(`[Playwright] Operation failed due to connection error, retrying (attempt ${attempt}/${maxRetries})...`);
+        // Reset browser instance to force reconnection
+        browserInstance = null;
+        browserConnectionPromise = null;
+        await sleep(INITIAL_RETRY_DELAY_MS);
+        continue;
+      }
+
+      // Not a connection error or out of retries
+      throw lastError;
     }
   }
+
+  // Should not reach here, but satisfy TypeScript
+  throw lastError || new Error("withPage failed without error");
 }
 
 /**

@@ -452,57 +452,57 @@ function parseOwnerInfoFromMainPageHtml(html: string): Partial<PropertyDetails> 
     land: {},
   };
 
+  // Build a map of label -> value by traversing Bootstrap row/col structure
+  // This is the primary method used by the current PAO website
+  const fieldMap: Record<string, string> = {};
+
+  $(".row").each((_, row) => {
+    const cols = $(row).find("[class*='col']");
+    if (cols.length >= 2) {
+      const label = $(cols[0]).text().trim().replace(/:$/, "");
+      const value = $(cols[1]).text().trim();
+      if (label && value && label.length < 50 && value.length < 500) {
+        // Normalize label to lowercase for easier matching
+        fieldMap[label.toLowerCase()] = value;
+      }
+    }
+  });
+
+  console.log(`[PAO Playwright] Parsed ${Object.keys(fieldMap).length} fields from owner content`);
+
+  const extractFieldFromMap = (labels: string[]): string | undefined => {
+    for (const label of labels) {
+      const lowerLabel = label.toLowerCase();
+      // Try exact match first
+      if (fieldMap[lowerLabel]) {
+        return fieldMap[lowerLabel];
+      }
+      // Try partial match
+      for (const [key, value] of Object.entries(fieldMap)) {
+        if (key.includes(lowerLabel) || lowerLabel.includes(key)) {
+          return value;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  // Fallback: search in raw HTML for labels that might not be in rows
   const extractFieldFromDom = (labels: string[]): string | undefined => {
+    // First try the field map (primary method)
+    const mapResult = extractFieldFromMap(labels);
+    if (mapResult) return mapResult;
+
+    // Fallback to DOM traversal for edge cases
     for (const label of labels) {
       const lowerLabel = label.toLowerCase();
       let found: string | undefined;
 
-      $(".font-weight-bold, strong, b, .label").each((_, el) => {
-        const labelText = $(el).text().toLowerCase().trim();
-        if (labelText.includes(lowerLabel) || labelText.replace(/[:\s]/g, '') === lowerLabel.replace(/[:\s]/g, '')) {
-          const parent = $(el).parent();
-          const nextEl = $(el).next();
-          const parentNext = parent.next();
-
-          if (nextEl.length && !nextEl.hasClass("font-weight-bold")) {
-            const val = nextEl.text().trim();
-            if (val && val.length > 0 && val.length < 500) {
-              found = val;
-              return false;
-            }
-          }
-
-          if (!found && parentNext.length) {
-            const val = parentNext.text().trim();
-            if (val && val.length > 0 && val.length < 500 && !val.toLowerCase().includes(lowerLabel)) {
-              found = val;
-              return false;
-            }
-          }
-
-          const parentRow = parent.closest(".row");
-          if (!found && parentRow.length) {
-            const cols = parentRow.find(".col, .col-sm, [class*='col-']");
-            let foundLabel = false;
-            cols.each((_, col) => {
-              const colText = $(col).text().trim();
-              if (foundLabel && colText && !colText.toLowerCase().includes(lowerLabel)) {
-                found = colText;
-                return false;
-              }
-              if (colText.toLowerCase().includes(lowerLabel)) {
-                foundLabel = true;
-              }
-            });
-          }
-        }
-      });
-
-      if (found) return found;
-
+      // Try dt/dd pairs
       const ddValue = $(`dt:contains("${label}")`).next("dd").text().trim();
       if (ddValue) return ddValue;
 
+      // Try table cells
       $("tr").each((_, row) => {
         const cells = $(row).find("td, th");
         cells.each((i, cell) => {
@@ -519,6 +519,7 @@ function parseOwnerInfoFromMainPageHtml(html: string): Partial<PropertyDetails> 
 
       if (found) return found;
 
+      // Try text content matching
       $("div, span, p").each((_, el) => {
         const text = $(el).text();
         const labelIndex = text.toLowerCase().indexOf(lowerLabel);
@@ -761,7 +762,7 @@ async function findManateePaoDetailUrlOnPage(
   debug.resultsPageLength = resultsHtml.length;
   debug.resultsUrl = currentUrl;
 
-  const directParcelMatch = currentUrl.match(/[?&]parid=(\d{10})/i);
+  const directParcelMatch = currentUrl.match(/[?&]parid=(\d{9,10})/i);
   if (directParcelMatch) {
     console.log(`[PAO Playwright] Direct navigation to detail page! Parcel ID: ${directParcelMatch[1]}`);
     return {
@@ -1057,7 +1058,7 @@ function parseSearchResults(html: string): SearchRow[] {
         const linkHref = $(link).attr("href") || "";
         if (linkHref.includes("parcel") || linkHref.includes("parid") || linkHref.includes("detail")) {
           href = linkHref;
-          const parcelMatch = linkHref.match(/(?:parid|parcel|parcelid)=(\d{10})/i);
+          const parcelMatch = linkHref.match(/(?:parid|parcel|parcelid)=(\d{9,10})/i);
           if (parcelMatch) {
             parcelId = parcelMatch[1];
           }
@@ -1065,7 +1066,7 @@ function parseSearchResults(html: string): SearchRow[] {
       });
 
       if (!parcelId) {
-        const textParcelMatch = text.match(/\b(\d{10})\b/);
+        const textParcelMatch = text.match(/\b(\d{9,10})\b/);
         if (textParcelMatch) {
           parcelId = textParcelMatch[1];
         }

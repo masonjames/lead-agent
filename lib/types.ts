@@ -17,6 +17,12 @@ export const formSchema = z.object({
     .optional()
     .or(z.literal('')),
   company: z.string().optional().or(z.literal('')),
+  address: z
+    .string()
+    .min(10, 'Please enter a complete property address.')
+    .max(200, 'Address must be less than 200 characters.')
+    .optional()
+    .or(z.literal('')),
   message: z
     .string()
     .min(10, 'Message is required')

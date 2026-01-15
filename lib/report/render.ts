@@ -134,6 +134,32 @@ function formatDate(date: string | Date | undefined): string {
 }
 
 /**
+ * Simple markdown to HTML converter for email rendering
+ * Handles: bold, links, lists, line breaks
+ */
+function markdownToHtml(markdown: string): string {
+  if (!markdown) return "";
+
+  return markdown
+    // Escape HTML entities first
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    // Convert **bold** to <strong>
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    // Convert [text](url) to links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #2563eb;">$1</a>')
+    // Convert - list items to bullet points
+    .replace(/^- (.+)$/gm, "• $1")
+    // Convert double newlines to paragraphs
+    .replace(/\n\n/g, "</p><p style=\"margin: 8px 0;\">")
+    // Convert single newlines to line breaks
+    .replace(/\n/g, "<br>")
+    // Wrap in paragraph
+    .replace(/^(.+)$/, "<p style=\"margin: 8px 0;\">$1</p>");
+}
+
+/**
  * Render lead report as HTML email
  */
 export function renderReportHtml(params: RenderReportParams): string {
@@ -313,7 +339,7 @@ export function renderReportHtml(params: RenderReportParams): string {
     ` : ""}
     ${enrichment.webResearchSummary ? `
     <h3 style="margin-top: 12px;">Web Research</h3>
-    <div style="font-size: 14px; color: #4b5563;">${enrichment.webResearchSummary}</div>
+    <div style="font-size: 14px; color: #4b5563;">${markdownToHtml(enrichment.webResearchSummary)}</div>
     ` : ""}
   </div>
   ` : ""}

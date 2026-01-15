@@ -26,6 +26,7 @@ export function LeadForm() {
       name: '',
       phone: '',
       company: '',
+      address: '',
       message: ''
     }
   });
@@ -139,6 +140,29 @@ export function LeadForm() {
                   />
                   <FieldDescription>
                     Optional: Tell us where you work.
+                  </FieldDescription>
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
+
+            <Controller
+              name="address"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="address">Property Address</FieldLabel>
+                  <Input
+                    {...field}
+                    id="address"
+                    aria-invalid={fieldState.invalid}
+                    placeholder="123 Main St, Bradenton, FL 34205"
+                    autoComplete="street-address"
+                  />
+                  <FieldDescription>
+                    Full address for property research (Manatee County, FL).
                   </FieldDescription>
                   {fieldState.invalid && (
                     <FieldError errors={[fieldState.error]} />

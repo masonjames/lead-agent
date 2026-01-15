@@ -87,11 +87,20 @@ export async function enrichWithExa(params: {
   console.log(`[Exa Enrichment] Searching for: ${query}`);
 
   try {
+    // Search for personal/professional profiles specifically
     const response = await exa.searchAndContents(query, {
       type: "auto",
       numResults: 5,
       text: { maxCharacters: 1500 },
       useAutoprompt: false,
+      // Filter to more relevant result types - exclude generic government sites
+      excludeDomains: [
+        "mymanatee.org",
+        "fl-counties.com",
+        "manateeclerk.com",
+        "votemanatee.gov",
+        "manatee.k12.fl.us",
+      ],
     });
 
     if (!response.results || response.results.length === 0) {
