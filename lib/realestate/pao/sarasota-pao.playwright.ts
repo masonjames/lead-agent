@@ -105,8 +105,13 @@ function parseAddressForSarasota(address: string): AddressParts {
   let zipCode: string | undefined;
   let unit: string | undefined;
 
-  // Extract unit from street (handles #13, Unit 13, Apt 13, etc.)
-  const unitMatch = street.match(/\s*(?:#|Unit|Apt|Suite|Ste)\s*(\w+)\s*$/i);
+  // Extract unit from street (handles #13, Unit 13, Apt 13, Unit #14-209, etc.)
+  // Pattern handles:
+  // - Simple: #13, Unit 13, Apt 5
+  // - With hash: Unit #14, Apt #5
+  // - With hyphen: #14-209, Unit 14-209, Unit #14-209 (condo building-unit format)
+  // - Alphanumeric: Unit A, Apt 201B, #A-101
+  const unitMatch = street.match(/\s*(?:#|Unit|Apt|Suite|Ste)[.\s]*#?([\w-]+)\s*$/i);
   if (unitMatch) {
     unit = unitMatch[1];
     street = street.replace(unitMatch[0], "").trim();

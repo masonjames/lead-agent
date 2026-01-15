@@ -89,7 +89,12 @@ const COUNTY_CONFIGS: Record<string, CountyTestConfig> = {
       },
       {
         address: "5701 Long Common Cir #13, Sarasota, FL 34235",
-        description: "Condo unit",
+        description: "Condo unit (simple)",
+        expectFound: true,
+      },
+      {
+        address: "5692 Bentgrass Dr Unit #14-209, Sarasota, FL 34235",
+        description: "Condo unit (building-unit format)",
         expectFound: true,
       },
       {
@@ -312,7 +317,19 @@ async function testAddressSearch(
     await page.waitForSelector(config.selectors.addressInput, { timeout: 10000 });
 
     // Extract street portion only (no city/state/zip for search)
-    const streetPart = testAddress.address.split(",")[0].trim();
+    let streetPart = testAddress.address.split(",")[0].trim();
+
+    // For Sarasota, parse and reconstruct the search query like the actual scraper does
+    // This handles unit numbers in formats like "Unit #14-209" -> "#14-209"
+    if (config.name.includes("Sarasota")) {
+      const unitMatch = streetPart.match(/\s*(?:#|Unit|Apt|Suite|Ste)[.\s]*#?([\w-]+)\s*$/i);
+      if (unitMatch) {
+        const unit = unitMatch[1];
+        const cleanStreet = streetPart.replace(unitMatch[0], "").trim();
+        streetPart = `${cleanStreet} #${unit}`;
+      }
+    }
+
     logStep(`Searching for: ${streetPart}`);
 
     // Fill the address field
