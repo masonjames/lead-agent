@@ -1,12 +1,17 @@
 /**
  * PAO Enrichment Service
- * 
- * Wrapper around the Manatee County PAO scraper that provides
- * a clean enrichment API with proper error handling for workflows.
+ *
+ * Multi-county PAO enrichment that routes to the correct
+ * Property Appraiser based on address/ZIP code.
+ *
+ * Supported Counties:
+ * - Manatee County (manateepao.gov)
+ * - Sarasota County (sc-pa.com)
  */
 
 import { canUsePlaywrightInThisEnv, PlaywrightError } from "@/lib/realestate/playwright/browser";
 import { scrapeManateePaoPropertyByAddressPlaywright } from "@/lib/realestate/pao/manatee-pao.playwright";
+import { scrapeSarasotaPaoPropertyByAddressPlaywright } from "@/lib/realestate/pao/sarasota-pao.playwright";
 import type { PropertyDetails } from "@/lib/realestate/property-types";
 
 export type EnrichmentStatus = "SUCCESS" | "SKIPPED" | "FAILED";
@@ -18,12 +23,14 @@ export interface PaoEnrichmentResult {
   debug?: Record<string, unknown>;
 }
 
+export type PaoSource = "manatee_pao" | "sarasota_pao";
+
 /**
  * Enrichment result with provenance tracking
  */
 export interface PaoEnrichmentWithProvenance extends PaoEnrichmentResult {
   provenance: {
-    source: "manatee_pao";
+    source: PaoSource;
     method: "playwright";
     confidence: number;
     sourceUrl?: string;
@@ -31,14 +38,141 @@ export interface PaoEnrichmentWithProvenance extends PaoEnrichmentResult {
   };
 }
 
+// ============================================================================
+// County Detection from Address/ZIP
+// ============================================================================
+
 /**
- * Enrich a lead with property data from Manatee County PAO
- * 
+ * ZIP codes by county for routing
+ * Source: US Census Bureau / USPS
+ */
+const MANATEE_COUNTY_ZIPS = new Set([
+  // Bradenton area
+  "34201", "34202", "34203", "34204", "34205", "34206", "34207", "34208", "34209", "34210", "34211", "34212",
+  // Beach communities
+  "34215", "34216", "34217", "34218",
+  // Palmetto/Ellenton
+  "34220", "34221", "34222",
+  // Parrish
+  "34219",
+  // Rural
+  "34250", "34251", "34270",
+  // Longboat Key (split with Sarasota - Manatee side)
+  "34228",
+]);
+
+const SARASOTA_COUNTY_ZIPS = new Set([
+  // Sarasota City
+  "34230", "34231", "34232", "34233", "34234", "34235", "34236", "34237", "34238", "34239",
+  "34240", "34241", "34242", "34243",
+  // Venice
+  "34275", "34284", "34285", "34286", "34287", "34288", "34289", "34292", "34293",
+  // North Port
+  "34286", "34287", "34288", "34289",
+  // Englewood (split with Charlotte)
+  "34223", "34224",
+  // Osprey/Nokomis
+  "34229", "34274", "34275",
+  // Longboat Key (split with Manatee - Sarasota side)
+  "34228",
+]);
+
+/**
+ * Known cities/areas by county
+ */
+const MANATEE_CITIES = [
+  "bradenton", "palmetto", "ellenton", "parrish", "lakewood ranch",
+  "anna maria", "holmes beach", "bradenton beach", "cortez",
+  "myakka city", "terra ceia", "tallevast",
+];
+
+const SARASOTA_CITIES = [
+  "sarasota", "venice", "north port", "englewood", "osprey", "nokomis",
+  "siesta key", "bird key", "lido key", "bee ridge", "gulf gate",
+];
+
+/**
+ * Extract ZIP code from address string
+ */
+function extractZipCode(address: string): string | null {
+  const zipMatch = address.match(/\b(\d{5})(?:-\d{4})?\b/);
+  return zipMatch ? zipMatch[1] : null;
+}
+
+/**
+ * Detect county from address
+ * Returns null if county cannot be determined (will try both)
+ */
+function detectCountyFromAddress(address: string): PaoSource | null {
+  const lowerAddress = address.toLowerCase();
+  const zipCode = extractZipCode(address);
+
+  // First, check ZIP code (most reliable)
+  if (zipCode) {
+    if (MANATEE_COUNTY_ZIPS.has(zipCode) && !SARASOTA_COUNTY_ZIPS.has(zipCode)) {
+      return "manatee_pao";
+    }
+    if (SARASOTA_COUNTY_ZIPS.has(zipCode) && !MANATEE_COUNTY_ZIPS.has(zipCode)) {
+      return "sarasota_pao";
+    }
+    // Some ZIPs are shared (like Longboat Key 34228) - continue to city check
+  }
+
+  // Second, check for city names
+  for (const city of SARASOTA_CITIES) {
+    if (lowerAddress.includes(city)) {
+      return "sarasota_pao";
+    }
+  }
+
+  for (const city of MANATEE_CITIES) {
+    if (lowerAddress.includes(city)) {
+      return "manatee_pao";
+    }
+  }
+
+  // Could not determine county
+  return null;
+}
+
+// ============================================================================
+// PAO Scraper Functions
+// ============================================================================
+
+interface ScrapeResult {
+  detailUrl: string | null;
+  scraped: Partial<PropertyDetails>;
+  debug: Record<string, unknown>;
+}
+
+type ScrapeFunction = (
+  address: string,
+  options: { timeoutMs: number; navTimeoutMs: number }
+) => Promise<ScrapeResult>;
+
+const SCRAPERS: Record<PaoSource, { name: string; scrape: ScrapeFunction }> = {
+  manatee_pao: {
+    name: "Manatee County PAO",
+    scrape: scrapeManateePaoPropertyByAddressPlaywright,
+  },
+  sarasota_pao: {
+    name: "Sarasota County PAO",
+    scrape: scrapeSarasotaPaoPropertyByAddressPlaywright,
+  },
+};
+
+// ============================================================================
+// Main Enrichment Function
+// ============================================================================
+
+/**
+ * Enrich a lead with property data from the appropriate county PAO
+ *
  * This function is designed to be workflow-safe:
  * - Returns SKIPPED if Playwright is not configured (doesn't fail workflow)
  * - Returns FAILED for actual errors but doesn't throw
- * - Only throws for blocking errors that should halt the workflow
- * 
+ * - Automatically routes to the correct county PAO based on address
+ *
  * @param params - Enrichment parameters
  * @returns Enrichment result with status, data, and provenance
  */
@@ -46,132 +180,144 @@ export async function enrichPaoByAddress(params: {
   address?: string;
   timeoutMs?: number;
   navTimeoutMs?: number;
+  forceSource?: PaoSource; // Override automatic detection
 }): Promise<PaoEnrichmentWithProvenance> {
   const timestamp = new Date().toISOString();
-  const baseProvenance = {
-    source: "manatee_pao" as const,
-    method: "playwright" as const,
-    timestamp,
-  };
+
+  // Helper to create failed/skipped result
+  const makeResult = (
+    status: EnrichmentStatus,
+    source: PaoSource,
+    error?: string,
+    debug?: Record<string, unknown>
+  ): PaoEnrichmentWithProvenance => ({
+    status,
+    error,
+    debug,
+    provenance: {
+      source,
+      method: "playwright",
+      timestamp,
+      confidence: 0,
+    },
+  });
 
   // Check if address is provided
   if (!params.address || !params.address.trim()) {
-    return {
-      status: "SKIPPED",
-      error: "No address provided for PAO enrichment",
-      provenance: {
-        ...baseProvenance,
-        confidence: 0,
-      },
-    };
+    return makeResult("SKIPPED", "manatee_pao", "No address provided for PAO enrichment");
   }
 
   // Check if Playwright is configured for this environment
   const playwrightCheck = canUsePlaywrightInThisEnv();
   if (!playwrightCheck.ok) {
     console.log(`[PAO Enrichment] Skipping: ${playwrightCheck.reason}`);
-    return {
-      status: "SKIPPED",
-      error: playwrightCheck.reason,
-      provenance: {
-        ...baseProvenance,
-        confidence: 0,
-      },
-    };
+    return makeResult("SKIPPED", "manatee_pao", playwrightCheck.reason);
   }
 
   const address = params.address.trim();
-  console.log(`[PAO Enrichment] Starting enrichment for: "${address}"`);
 
-  try {
-    const result = await scrapeManateePaoPropertyByAddressPlaywright(address, {
-      timeoutMs: params.timeoutMs || 60000,
-      navTimeoutMs: params.navTimeoutMs || 45000,
-    });
+  // Detect county from address
+  let detectedSource = params.forceSource || detectCountyFromAddress(address);
+  const sourcesToTry: PaoSource[] = detectedSource
+    ? [detectedSource]
+    : ["manatee_pao", "sarasota_pao"]; // Try both if unknown
 
-    // No property found
-    if (!result.detailUrl || !result.scraped || Object.keys(result.scraped).length === 0) {
-      console.log(`[PAO Enrichment] No property found for address: "${address}"`);
-      return {
-        status: "FAILED",
-        error: `No property found in Manatee County PAO for address: "${address}"`,
-        debug: result.debug,
-        provenance: {
-          ...baseProvenance,
-          confidence: 0,
-        },
-      };
-    }
+  console.log(
+    `[PAO Enrichment] Starting enrichment for: "${address}" (detected: ${detectedSource || "unknown, trying both"})`
+  );
 
-    // Calculate confidence based on data quality
-    const confidence = calculateConfidence(result.scraped);
+  // Try each source until we find a match
+  for (const source of sourcesToTry) {
+    const scraper = SCRAPERS[source];
+    console.log(`[PAO Enrichment] Trying ${scraper.name}...`);
 
-    console.log(`[PAO Enrichment] Success! Found property with ${confidence * 100}% confidence`);
-    
-    return {
-      status: "SUCCESS",
-      property: result.scraped,
-      debug: result.debug,
-      provenance: {
-        ...baseProvenance,
-        confidence,
-        sourceUrl: result.detailUrl,
-      },
-    };
-  } catch (error) {
-    // Handle Playwright-specific errors
-    if (error instanceof PlaywrightError) {
-      const errorResult: PaoEnrichmentWithProvenance = {
-        status: "FAILED",
-        error: `PAO scraping error (${error.code}): ${error.message}`,
-        debug: { errorCode: error.code },
-        provenance: {
-          ...baseProvenance,
-          confidence: 0,
-        },
-      };
+    try {
+      const result = await scraper.scrape(address, {
+        timeoutMs: params.timeoutMs || 60000,
+        navTimeoutMs: params.navTimeoutMs || 45000,
+      });
 
-      // For blocking errors, we might want to flag for manual review
-      if (error.code === "BLOCKED") {
-        errorResult.error = "PAO site detected automated access - manual review recommended";
+      // Check if property was found
+      if (result.detailUrl && result.scraped && Object.keys(result.scraped).length > 0) {
+        const confidence = calculateConfidence(result.scraped);
+
+        console.log(
+          `[PAO Enrichment] Success! Found property in ${scraper.name} with ${Math.round(confidence * 100)}% confidence`
+        );
+
+        return {
+          status: "SUCCESS",
+          property: result.scraped,
+          debug: { ...result.debug, source },
+          provenance: {
+            source,
+            method: "playwright",
+            confidence,
+            sourceUrl: result.detailUrl,
+            timestamp,
+          },
+        };
       }
 
-      // For browser launch failures in development, mark as skipped
-      if (error.code === "BROWSER_LAUNCH_FAILED") {
+      console.log(`[PAO Enrichment] No property found in ${scraper.name}`);
+    } catch (error) {
+      // Log error but continue to next source
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`[PAO Enrichment] ${scraper.name} error: ${errorMsg}`);
+
+      // For blocking errors, return immediately
+      if (error instanceof PlaywrightError && error.code === "BLOCKED") {
+        return {
+          status: "FAILED",
+          error: `${scraper.name} site detected automated access - manual review recommended`,
+          debug: { errorCode: error.code, source },
+          provenance: {
+            source,
+            method: "playwright",
+            timestamp,
+            confidence: 0,
+          },
+        };
+      }
+
+      // For browser launch failures in development, skip
+      if (error instanceof PlaywrightError && error.code === "BROWSER_LAUNCH_FAILED") {
         const isProduction = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
         if (!isProduction) {
-          return {
-            status: "SKIPPED",
-            error: "Playwright browser not available in development (no PLAYWRIGHT_WS_ENDPOINT)",
-            provenance: {
-              ...baseProvenance,
-              confidence: 0,
-            },
-          };
+          return makeResult(
+            "SKIPPED",
+            source,
+            "Playwright browser not available in development (no PLAYWRIGHT_WS_ENDPOINT)"
+          );
         }
       }
-
-      return errorResult;
     }
-
-    // Generic error handling
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[PAO Enrichment] Error: ${errorMessage}`);
-
-    return {
-      status: "FAILED",
-      error: `PAO enrichment failed: ${errorMessage}`,
-      provenance: {
-        ...baseProvenance,
-        confidence: 0,
-      },
-    };
   }
+
+  // No property found in any source
+  const triedSources = sourcesToTry.map((s) => SCRAPERS[s].name).join(" and ");
+  console.log(`[PAO Enrichment] No property found for address: "${address}"`);
+
+  return {
+    status: "FAILED",
+    error: `No property found in ${triedSources} for address: "${address}"`,
+    debug: { sourcesChecked: sourcesToTry },
+    provenance: {
+      source: sourcesToTry[0],
+      method: "playwright",
+      timestamp,
+      confidence: 0,
+    },
+  };
 }
+
+// ============================================================================
+// Confidence Calculation
+// ============================================================================
 
 /**
  * Calculate confidence score based on data quality
- * 
+ *
  * Factors:
  * - Owner name present: +0.2
  * - Address matches: +0.2
@@ -216,6 +362,10 @@ function calculateConfidence(property: Partial<PropertyDetails>): number {
   return Math.min(confidence, 1);
 }
 
+// ============================================================================
+// Property Summary Extraction
+// ============================================================================
+
 /**
  * Extract key property facts for lead report summary
  */
@@ -237,7 +387,7 @@ export function extractPropertySummary(property: Partial<PropertyDetails>): {
   if (property.owner) summary.owner = property.owner;
   if (property.address) summary.address = property.address;
   if (property.propertyType) summary.propertyType = property.propertyType;
-  
+
   // Building info
   const building = property.building;
   if (building?.yearBuilt) summary.yearBuilt = building.yearBuilt;
@@ -250,16 +400,14 @@ export function extractPropertySummary(property: Partial<PropertyDetails>): {
 
   // Valuation info - get latest year
   if (property.valuations && property.valuations.length > 0) {
-    const latest = property.valuations.reduce((a, b) => 
-      (b.year || 0) > (a.year || 0) ? b : a
-    );
+    const latest = property.valuations.reduce((a, b) => ((b.year || 0) > (a.year || 0) ? b : a));
     if (latest.assessed?.total) summary.assessedValue = latest.assessed.total;
     if (latest.just?.total) summary.marketValue = latest.just.total;
   }
 
   // Sales history - get most recent
   if (property.salesHistory && property.salesHistory.length > 0) {
-    const recent = property.salesHistory.find(s => s.price && s.price > 0);
+    const recent = property.salesHistory.find((s) => s.price && s.price > 0);
     if (recent) {
       summary.lastSaleDate = recent.date;
       summary.lastSalePrice = recent.price;

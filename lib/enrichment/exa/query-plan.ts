@@ -100,46 +100,49 @@ export function buildExaQueryPlan(params: QueryPlanParams): ExaQueryTask[] {
   
   // --- Task 2: Florida License Registry Search ---
   // High-value: find professional licenses (RE agent, contractor, etc.)
+  // Note: Exa API only allows includeDomains OR excludeDomains, not both
   if (name && parsedName) {
     // DBPR uses "LastName, FirstName" format in many cases
     const licenseQuery = `"${parsedName.lastName}" "${parsedName.firstName}" Florida license`;
-    
+
     tasks.push({
       intent: "license_registry_fl",
       query: licenseQuery,
       includeDomains: INCLUDE_DOMAINS_LICENSE_FL,
-      excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
+      // Don't use excludeDomains when includeDomains is set
       numResults: 3,
       maxCharacters: DEFAULT_MAX_CHARACTERS,
     });
   }
-  
+
   // --- Task 3: Florida Business Registry Search ---
   // High-value: find business ownership/officer roles
+  // Note: Exa API only allows includeDomains OR excludeDomains, not both
   if (name) {
     const sunbizQuery = `"${name}" Florida corporation LLC`;
-    
+
     tasks.push({
       intent: "business_registry_fl",
       query: sunbizQuery,
       includeDomains: INCLUDE_DOMAINS_BUSINESS_REGISTRY_FL,
-      excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
+      // Don't use excludeDomains when includeDomains is set
       numResults: 3,
       maxCharacters: DEFAULT_MAX_CHARACTERS,
     });
   }
-  
+
   // --- Task 4: Social Profiles Search (Optional) ---
   // Can be noisy but sometimes finds LinkedIn/Facebook profiles
+  // Note: Exa API only allows includeDomains OR excludeDomains, not both
   if (name && parsedName?.lastName) {
     // More specific query to reduce noise
     const socialQuery = `"${name}" ${locationContext} profile`;
-    
+
     tasks.push({
       intent: "social_profiles",
       query: socialQuery,
       includeDomains: INCLUDE_DOMAINS_SOCIAL_PROFILES,
-      excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
+      // Don't use excludeDomains when includeDomains is set
       numResults: 3,
       maxCharacters: DEFAULT_MAX_CHARACTERS,
     });

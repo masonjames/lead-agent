@@ -45,3 +45,14 @@ export function extractParcelIdFromManateePaoUrl(url: string): string | null {
     return match ? normalizeParcelId(match[1]) : null;
   }
 }
+
+/**
+ * Extract parcel ID from a Sarasota PAO detail URL.
+ * URLs look like: https://www.sc-pa.com/propertysearch/parcel/details/1234567890
+ * or https://www.sc-pa.com/propertysearch/parcel/1234567890
+ */
+export function extractParcelIdFromSarasotaPaoUrl(url: string): string | null {
+  // Sarasota uses 10-digit parcel IDs in the URL path
+  const match = url.match(/\/parcel(?:\/details)?\/(\d+)/);
+  return match ? normalizeParcelId(match[1]) : null;
+}

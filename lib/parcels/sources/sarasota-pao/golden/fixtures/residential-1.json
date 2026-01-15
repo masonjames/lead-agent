@@ -1,0 +1,94 @@
+{
+  "parcelId": "1234567890",
+  "address": "100 EXAMPLE BLVD",
+  "city": "SARASOTA",
+  "state": "FL",
+  "zipCode": "34231",
+  "owner": "JOHNSON MARY & DAVID",
+  "propertyType": "Single Family",
+  "yearBuilt": 1998,
+  "bedrooms": 4,
+  "bathrooms": 3,
+  "sqft": 2450,
+  "assessedValue": 425000,
+  "marketValue": 485000,
+  "lastSaleDate": "2019-03-22",
+  "lastSalePrice": 350000,
+  "basicInfo": {
+    "accountNumber": "1234567890",
+    "useCode": "0100",
+    "useDescription": "SINGLE FAMILY RESIDENTIAL",
+    "situsAddress": "100 EXAMPLE BLVD, SARASOTA FL 34231",
+    "subdivision": "EXAMPLE ESTATES",
+    "homesteadExemption": true,
+    "legalDescription": "LOT 15 BLK A EXAMPLE ESTATES"
+  },
+  "land": {
+    "lotSizeAcres": 0.25,
+    "lotSizeSqFt": 10890
+  },
+  "building": {
+    "yearBuilt": 1998,
+    "effectiveYearBuilt": 1998,
+    "livingAreaSqFt": 2450,
+    "totalAreaSqFt": 3200,
+    "bedrooms": 4,
+    "bathrooms": 3,
+    "fullBathrooms": 2,
+    "halfBathrooms": 2,
+    "stories": 2,
+    "constructionType": "CBS",
+    "heating": "CENTRAL",
+    "cooling": "CENTRAL",
+    "pool": {
+      "hasPool": true,
+      "poolType": "IN-GROUND"
+    },
+    "garage": {
+      "spaces": 2
+    }
+  },
+  "valuations": [
+    {
+      "year": 2024,
+      "just": { "land": 125000, "building": 360000, "total": 485000 },
+      "assessed": { "total": 425000 },
+      "taxable": { "total": 375000 },
+      "adValoremTaxes": 6750
+    },
+    {
+      "year": 2023,
+      "just": { "land": 115000, "building": 340000, "total": 455000 },
+      "assessed": { "total": 400000 },
+      "taxable": { "total": 350000 },
+      "adValoremTaxes": 6300
+    },
+    {
+      "year": 2022,
+      "just": { "land": 100000, "building": 310000, "total": 410000 },
+      "assessed": { "total": 370000 },
+      "taxable": { "total": 320000 },
+      "adValoremTaxes": 5760
+    }
+  ],
+  "salesHistory": [
+    {
+      "date": "2019-03-22",
+      "price": 350000,
+      "deedType": "WD",
+      "qualified": true,
+      "instrumentNumber": "2019123456",
+      "grantor": "SMITH ROBERT",
+      "grantee": "JOHNSON MARY & DAVID"
+    },
+    {
+      "date": "2005-08-10",
+      "price": 285000,
+      "deedType": "WD",
+      "qualified": true,
+      "instrumentNumber": "2005789012",
+      "grantor": "BUILDER INC",
+      "grantee": "SMITH ROBERT"
+    }
+  ]
+}

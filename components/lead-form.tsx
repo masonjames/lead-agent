@@ -162,7 +162,7 @@ export function LeadForm() {
                     autoComplete="street-address"
                   />
                   <FieldDescription>
-                    Full address for property research (Manatee County, FL).
+                    Primary address for property research (Manatee & Sarasota County, FL).
                   </FieldDescription>
                   {fieldState.invalid && (
                     <FieldError errors={[fieldState.error]} />

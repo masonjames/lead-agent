@@ -8,13 +8,13 @@
 // Source Keys
 // ============================================================================
 
-export type ParcelSourceKey = "fl-manatee-pa" | "fl-statewide-parcels";
+export type ParcelSourceKey = "fl-manatee-pa" | "fl-sarasota-pa" | "fl-statewide-parcels";
 
 export const FLORIDA_STATE_FIPS = "12";
 
 export const COUNTY_FIPS: Record<string, { fips: string; name: string }> = {
   manatee: { fips: "081", name: "Manatee County" },
-  // Add more counties as adapters are implemented
+  sarasota: { fips: "115", name: "Sarasota County" },
 };
 
 // ============================================================================

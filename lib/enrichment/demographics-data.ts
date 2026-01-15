@@ -244,7 +244,114 @@ export const MANATEE_COUNTY_ZIP_DATA: Record<string, ZipCodeDemographics> = {
     characteristics: ["Near airport", "Industrial area"],
   },
 
-  // === SARASOTA COUNTY OVERLAP ===
+};
+
+/**
+ * Sarasota County ZIP code demographics lookup table
+ * Sources: US Census ACS 2023, Zillow, local market data
+ */
+export const SARASOTA_COUNTY_ZIP_DATA: Record<string, ZipCodeDemographics> = {
+  // === SARASOTA CITY ===
+  "34230": {
+    zipCode: "34230",
+    city: "Sarasota",
+    area: "Downtown Sarasota (PO Boxes)",
+    medianHouseholdIncome: 75000,
+    medianHomeValue: 450000,
+    incomeProxy: "HIGH",
+    populationDensity: "urban",
+    characteristics: ["Downtown", "Urban core"],
+  },
+  "34231": {
+    zipCode: "34231",
+    city: "Sarasota",
+    area: "South Sarasota / Gulf Gate",
+    medianHouseholdIncome: 58000,
+    medianHomeValue: 340000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Established neighborhoods", "Near beaches"],
+  },
+  "34232": {
+    zipCode: "34232",
+    city: "Sarasota",
+    area: "East Sarasota / Bee Ridge",
+    medianHouseholdIncome: 52000,
+    medianHomeValue: 310000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Commercial area", "Mixed residential"],
+  },
+  "34233": {
+    zipCode: "34233",
+    city: "Sarasota",
+    area: "Southeast Sarasota / Palmer Ranch",
+    medianHouseholdIncome: 85000,
+    medianHomeValue: 425000,
+    incomeProxy: "HIGH",
+    populationDensity: "suburban",
+    characteristics: ["Master-planned community", "Golf courses"],
+  },
+  "34234": {
+    zipCode: "34234",
+    city: "Sarasota",
+    area: "North Sarasota / Newtown",
+    medianHouseholdIncome: 42000,
+    medianHomeValue: 225000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Historic area", "Revitalization"],
+  },
+  "34235": {
+    zipCode: "34235",
+    city: "Sarasota",
+    area: "East Sarasota / Fruitville",
+    medianHouseholdIncome: 55000,
+    medianHomeValue: 295000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Established area", "Near downtown", "Condos"],
+  },
+  "34236": {
+    zipCode: "34236",
+    city: "Sarasota",
+    area: "Downtown / St. Armands",
+    medianHouseholdIncome: 95000,
+    medianHomeValue: 750000,
+    incomeProxy: "VERY_HIGH",
+    populationDensity: "urban",
+    characteristics: ["Luxury condos", "St. Armands Circle", "Arts district"],
+  },
+  "34237": {
+    zipCode: "34237",
+    city: "Sarasota",
+    area: "Central Sarasota / Southgate",
+    medianHouseholdIncome: 48000,
+    medianHomeValue: 285000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Near Sarasota Square", "Commercial area"],
+  },
+  "34238": {
+    zipCode: "34238",
+    city: "Sarasota",
+    area: "Palmer Ranch / Osprey",
+    medianHouseholdIncome: 92000,
+    medianHomeValue: 480000,
+    incomeProxy: "HIGH",
+    populationDensity: "suburban",
+    characteristics: ["Gated communities", "Golf courses", "Family-oriented"],
+  },
+  "34239": {
+    zipCode: "34239",
+    city: "Sarasota",
+    area: "Southside Village / Hillview",
+    medianHouseholdIncome: 72000,
+    medianHomeValue: 520000,
+    incomeProxy: "HIGH",
+    populationDensity: "suburban",
+    characteristics: ["Near downtown", "Trendy restaurants", "Walkable"],
+  },
   "34240": {
     zipCode: "34240",
     city: "Sarasota",
@@ -255,6 +362,26 @@ export const MANATEE_COUNTY_ZIP_DATA: Record<string, ZipCodeDemographics> = {
     populationDensity: "suburban",
     characteristics: ["Lakewood Ranch area", "New developments"],
   },
+  "34241": {
+    zipCode: "34241",
+    city: "Sarasota",
+    area: "East County / Myakka",
+    medianHouseholdIncome: 68000,
+    medianHomeValue: 380000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "rural",
+    characteristics: ["Large lots", "Agricultural", "Equestrian"],
+  },
+  "34242": {
+    zipCode: "34242",
+    city: "Sarasota",
+    area: "Siesta Key",
+    medianHouseholdIncome: 115000,
+    medianHomeValue: 950000,
+    incomeProxy: "VERY_HIGH",
+    populationDensity: "suburban",
+    characteristics: ["Beach community", "Vacation rentals", "Award-winning beach"],
+  },
   "34243": {
     zipCode: "34243",
     city: "Sarasota",
@@ -264,6 +391,132 @@ export const MANATEE_COUNTY_ZIP_DATA: Record<string, ZipCodeDemographics> = {
     incomeProxy: "HIGH",
     populationDensity: "suburban",
     characteristics: ["University Town Center", "Commercial area"],
+  },
+
+  // === VENICE AREA ===
+  "34275": {
+    zipCode: "34275",
+    city: "Nokomis",
+    area: "Nokomis / Laurel",
+    medianHouseholdIncome: 62000,
+    medianHomeValue: 365000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Quiet area", "Near beaches"],
+  },
+  "34285": {
+    zipCode: "34285",
+    city: "Venice",
+    area: "Venice Island",
+    medianHouseholdIncome: 65000,
+    medianHomeValue: 480000,
+    incomeProxy: "HIGH",
+    populationDensity: "suburban",
+    characteristics: ["Historic downtown", "Beach access", "Retirement community"],
+  },
+  "34292": {
+    zipCode: "34292",
+    city: "Venice",
+    area: "East Venice",
+    medianHouseholdIncome: 58000,
+    medianHomeValue: 350000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Established area", "Near I-75"],
+  },
+  "34293": {
+    zipCode: "34293",
+    city: "Venice",
+    area: "South Venice / Englewood",
+    medianHouseholdIncome: 55000,
+    medianHomeValue: 320000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Near beaches", "Retirement area"],
+  },
+
+  // === NORTH PORT ===
+  "34286": {
+    zipCode: "34286",
+    city: "North Port",
+    area: "North Port",
+    medianHouseholdIncome: 52000,
+    medianHomeValue: 285000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Affordable", "Growing area", "New construction"],
+  },
+  "34287": {
+    zipCode: "34287",
+    city: "North Port",
+    area: "North Port West",
+    medianHouseholdIncome: 55000,
+    medianHomeValue: 295000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["New developments", "Family-oriented"],
+  },
+  "34288": {
+    zipCode: "34288",
+    city: "North Port",
+    area: "North Port South",
+    medianHouseholdIncome: 48000,
+    medianHomeValue: 265000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Affordable housing", "Growing community"],
+  },
+  "34289": {
+    zipCode: "34289",
+    city: "North Port",
+    area: "North Port (PO Boxes)",
+    medianHouseholdIncome: 50000,
+    medianHomeValue: 275000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["PO Box area"],
+  },
+
+  // === OTHER AREAS ===
+  "34223": {
+    zipCode: "34223",
+    city: "Englewood",
+    area: "Englewood",
+    medianHouseholdIncome: 52000,
+    medianHomeValue: 340000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Beach access", "Retirement community"],
+  },
+  "34224": {
+    zipCode: "34224",
+    city: "Englewood",
+    area: "Englewood Beach",
+    medianHouseholdIncome: 58000,
+    medianHomeValue: 380000,
+    incomeProxy: "MEDIUM",
+    populationDensity: "suburban",
+    characteristics: ["Beach community", "Near state park"],
+  },
+  "34229": {
+    zipCode: "34229",
+    city: "Osprey",
+    area: "Osprey",
+    medianHouseholdIncome: 82000,
+    medianHomeValue: 520000,
+    incomeProxy: "HIGH",
+    populationDensity: "suburban",
+    characteristics: ["Waterfront", "Historic area", "Upscale"],
+  },
+  "34274": {
+    zipCode: "34274",
+    city: "Nokomis",
+    area: "Casey Key",
+    medianHouseholdIncome: 125000,
+    medianHomeValue: 1200000,
+    incomeProxy: "VERY_HIGH",
+    populationDensity: "suburban",
+    characteristics: ["Exclusive beach", "Luxury homes", "Private"],
   },
 };
 
@@ -281,29 +534,71 @@ export const MANATEE_COUNTY_DEFAULTS: ZipCodeDemographics = {
 };
 
 /**
+ * Default demographics for Sarasota County when ZIP not found
+ */
+export const SARASOTA_COUNTY_DEFAULTS: ZipCodeDemographics = {
+  zipCode: "unknown",
+  city: "Sarasota County",
+  medianHouseholdIncome: 62000,
+  medianHomeValue: 375000,
+  incomeProxy: "MEDIUM",
+  populationDensity: "suburban",
+  characteristics: ["County average"],
+};
+
+/**
  * Lookup demographics by ZIP code
- * Returns cached census data for Manatee County ZIPs
+ * Returns cached census data for Manatee or Sarasota County ZIPs
  */
 export function getZipCodeDemographics(zipCode: string): ZipCodeDemographics | null {
   // Normalize ZIP code (first 5 digits)
   const normalizedZip = zipCode.trim().substring(0, 5);
-  return MANATEE_COUNTY_ZIP_DATA[normalizedZip] || null;
+
+  // Check Manatee County first
+  if (normalizedZip in MANATEE_COUNTY_ZIP_DATA) {
+    return MANATEE_COUNTY_ZIP_DATA[normalizedZip];
+  }
+
+  // Then check Sarasota County
+  if (normalizedZip in SARASOTA_COUNTY_ZIP_DATA) {
+    return SARASOTA_COUNTY_ZIP_DATA[normalizedZip];
+  }
+
+  return null;
 }
 
 /**
  * Check if a ZIP code is in Manatee County
+ * Uses the actual lookup table for accuracy
  */
 export function isManateeCountyZip(zipCode: string): boolean {
   const normalizedZip = zipCode.trim().substring(0, 5);
+  return normalizedZip in MANATEE_COUNTY_ZIP_DATA;
+}
 
-  // Manatee County ZIP codes typically start with 342xx
-  // Plus some edge cases like 33598 (Wimauma overlap)
-  if (normalizedZip.startsWith("342") || normalizedZip === "33598") {
-    return true;
+/**
+ * Check if a ZIP code is in Sarasota County
+ */
+export function isSarasotaCountyZip(zipCode: string): boolean {
+  const normalizedZip = zipCode.trim().substring(0, 5);
+  return normalizedZip in SARASOTA_COUNTY_ZIP_DATA;
+}
+
+/**
+ * Get the county name for a ZIP code
+ */
+export function getCountyForZip(zipCode: string): "Manatee" | "Sarasota" | null {
+  const normalizedZip = zipCode.trim().substring(0, 5);
+
+  if (normalizedZip in MANATEE_COUNTY_ZIP_DATA) {
+    return "Manatee";
   }
 
-  // Also check the lookup table
-  return normalizedZip in MANATEE_COUNTY_ZIP_DATA;
+  if (normalizedZip in SARASOTA_COUNTY_ZIP_DATA) {
+    return "Sarasota";
+  }
+
+  return null;
 }
 
 /**

@@ -1,0 +1,64 @@
+{
+  "parcelId": "2043131013",
+  "address": "5701 LONG COMMON CIR #13",
+  "city": "SARASOTA",
+  "state": "FL",
+  "zipCode": "34235",
+  "owner": "TEST OWNER NAME",
+  "propertyType": "Condominium",
+  "yearBuilt": 1984,
+  "bedrooms": 2,
+  "bathrooms": 2,
+  "sqft": 1090,
+  "assessedValue": 185000,
+  "marketValue": 195000,
+  "lastSaleDate": "2020-06-15",
+  "lastSalePrice": 155000,
+  "basicInfo": {
+    "accountNumber": "2043131013",
+    "useCode": "0400",
+    "useDescription": "CONDOMINIUM",
+    "situsAddress": "5701 LONG COMMON CIR #13, SARASOTA FL 34235",
+    "subdivision": "LONG COMMON",
+    "homesteadExemption": true
+  },
+  "building": {
+    "yearBuilt": 1984,
+    "effectiveYearBuilt": 1984,
+    "livingAreaSqFt": 1090,
+    "totalAreaSqFt": 1090,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "fullBathrooms": 2,
+    "halfBathrooms": 0,
+    "stories": 2,
+    "constructionType": "CBS"
+  },
+  "valuations": [
+    {
+      "year": 2024,
+      "just": { "land": 45000, "building": 150000, "total": 195000 },
+      "assessed": { "total": 185000 },
+      "taxable": { "total": 135000 },
+      "adValoremTaxes": 2430
+    },
+    {
+      "year": 2023,
+      "just": { "land": 42000, "building": 138000, "total": 180000 },
+      "assessed": { "total": 175000 },
+      "taxable": { "total": 125000 },
+      "adValoremTaxes": 2250
+    }
+  ],
+  "salesHistory": [
+    {
+      "date": "2020-06-15",
+      "price": 155000,
+      "deedType": "WD",
+      "qualified": true,
+      "instrumentNumber": "2020234567",
+      "grantor": "PREVIOUS OWNER LLC",
+      "grantee": "TEST OWNER NAME"
+    }
+  ]
+}

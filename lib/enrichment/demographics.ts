@@ -10,9 +10,12 @@ import { exa } from "@/lib/exa";
 import {
   getZipCodeDemographics,
   isManateeCountyZip,
+  isSarasotaCountyZip,
+  getCountyForZip,
   formatIncome,
   formatHomeValue,
   MANATEE_COUNTY_DEFAULTS,
+  SARASOTA_COUNTY_DEFAULTS,
   type ZipCodeDemographics,
 } from "./demographics-data";
 
@@ -106,15 +109,17 @@ export async function getDemographicInsights(params: {
       };
     }
 
-    // Check if it's a Manatee County ZIP we don't have specific data for
-    if (isManateeCountyZip(params.zipCode)) {
+    // Check if it's a known county ZIP we don't have specific data for
+    const county = getCountyForZip(params.zipCode);
+    if (county) {
+      const defaults = county === "Manatee" ? MANATEE_COUNTY_DEFAULTS : SARASOTA_COUNTY_DEFAULTS;
       console.log(
-        `[Demographics Enrichment] ZIP ${params.zipCode} is in Manatee County but no specific data, using county defaults`
+        `[Demographics Enrichment] ZIP ${params.zipCode} is in ${county} County but no specific data, using county defaults`
       );
 
       return {
         status: "SUCCESS",
-        data: zipDataToInsights(MANATEE_COUNTY_DEFAULTS),
+        data: zipDataToInsights(defaults),
         provenance: {
           ...baseProvenance,
           method: "static_lookup" as const,
@@ -229,14 +234,14 @@ export async function getDemographicInsights(params: {
       }
     }
 
-    // Use Manatee County defaults if no data found
+    // Use regional defaults if no data found
     if (Object.keys(insights).length === 0) {
-      // Manatee County average data (2023-2024 estimates)
-      insights.medianHouseholdIncome = "$65,000 (Manatee County avg)";
-      insights.medianHomeValue = "$385,000 (Manatee County avg)";
+      // Sarasota-Manatee area average data (2023-2024 estimates)
+      insights.medianHouseholdIncome = "$65,000 (regional avg)";
+      insights.medianHomeValue = "$380,000 (regional avg)";
       insights.incomeProxy = "MEDIUM";
-      
-      console.log("[Demographics Enrichment] Using Manatee County defaults");
+
+      console.log("[Demographics Enrichment] Using regional defaults");
     }
 
     // Calculate confidence
@@ -264,7 +269,7 @@ export async function getDemographicInsights(params: {
     return {
       status: "SUCCESS",
       data: {
-        medianHouseholdIncome: "$65,000 (Manatee County est.)",
+        medianHouseholdIncome: "$65,000 (regional est.)",
         incomeProxy: "MEDIUM",
       },
       error: `Search failed, using defaults: ${errorMessage}`,
