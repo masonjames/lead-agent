@@ -279,7 +279,7 @@ export function renderReportHtml(params: RenderReportParams): string {
   ${property ? `
   <div class="card">
     <h2>🏠 Property Details</h2>
-    <div class="value" style="font-weight: 600;">${property.address || "Address not found"}</div>
+    <div class="value" style="font-weight: 600;">${property.address || contact?.address || "Address not provided"}</div>
     ${property.parcelId ? `<div class="provenance">Parcel ID: ${property.parcelId}</div>` : ""}
     <div class="grid" style="margin-top: 12px;">
       <div>

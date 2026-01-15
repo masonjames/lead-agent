@@ -17,6 +17,7 @@ export interface LeadIdentity {
   city?: string;
   state?: string;
   zipCode?: string;
+  company?: string;
 }
 
 export interface MatchResult {
@@ -220,7 +221,28 @@ export function scoreMatchToLead(params: {
     score += 0.08;
     reasons.push("ZIP code match");
   }
-  
+
+  // STRONG: Company name match (+0.30 in title, +0.20 in text)
+  // Very important for finding company websites and business listings
+  if (lead.company) {
+    const normalizedCompany = lead.company.toLowerCase().trim();
+    // Check for exact company name or significant portion
+    if (lowerTitle.includes(normalizedCompany)) {
+      score += 0.30;
+      reasons.push("Company name in title");
+    } else if (lowerText.includes(normalizedCompany)) {
+      score += 0.20;
+      reasons.push("Company name in content");
+    }
+    // Also check URL for company name (common for company websites)
+    const normalizedUrl = doc.url.toLowerCase();
+    const companySlug = normalizedCompany.replace(/\s+/g, "").replace(/[^a-z0-9]/g, "");
+    if (normalizedUrl.includes(companySlug) || normalizedUrl.includes(normalizedCompany.replace(/\s+/g, "-"))) {
+      score += 0.15;
+      reasons.push("Company name in URL");
+    }
+  }
+
   // BONUS: Category-based adjustments
   if (doc.category === "LICENSE_REGISTRY" || doc.category === "BUSINESS_REGISTRY") {
     // These are high-value sources, slight bonus
@@ -232,7 +254,13 @@ export function scoreMatchToLead(params: {
     // Profile pages are more likely to be about the person
     score += 0.03;
   }
-  
+
+  if (doc.category === "BUSINESS_LISTING" || doc.category === "COMPANY_WEBSITE") {
+    // Business listings are high-value for company research
+    score += 0.05;
+    reasons.push("Business listing source");
+  }
+
   // NEGATIVE: People directory with weak match
   if (doc.category === "PEOPLE_DIRECTORY" && score < 0.4) {
     score *= 0.5; // Heavily penalize weak people directory matches
@@ -301,6 +329,8 @@ export function shouldIncludeResult(
     "REAL_ESTATE_PROFILE",
     "LICENSE_REGISTRY",
     "BUSINESS_REGISTRY",
+    "BUSINESS_LISTING",
+    "COMPANY_WEBSITE",
   ];
 
   if (highValueCategories.includes(category)) {

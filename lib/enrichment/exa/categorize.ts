@@ -16,6 +16,8 @@ export type ExaSourceCategory =
   | "REAL_ESTATE_PROFILE"
   | "LICENSE_REGISTRY"
   | "BUSINESS_REGISTRY"
+  | "BUSINESS_LISTING"
+  | "COMPANY_WEBSITE"
   | "NEWS_MENTION"
   | "PEOPLE_DIRECTORY"
   | "OTHER";
@@ -34,6 +36,10 @@ export type ProfilePlatform =
   | "Brokerage"
   | "License"
   | "Business"
+  | "Yelp"
+  | "BBB"
+  | "Google"
+  | "Company"
   | "News"
   | "Other";
 
@@ -230,7 +236,32 @@ export function categorizeExaUrl(input: {
       confidence: 0.7,
     };
   }
-  
+
+  // Check for business listing sites (Yelp, BBB, Google Business, etc.)
+  if (domainMatches(domain, DOMAIN_CATEGORY_PATTERNS.BUSINESS_LISTING)) {
+    // Determine specific platform
+    let platform: ProfilePlatform = "Other";
+    if (domain.includes("yelp.com")) platform = "Yelp";
+    else if (domain.includes("bbb.org")) platform = "BBB";
+    else if (domain.includes("google.com")) platform = "Google";
+
+    // Check if it's a business page (vs generic search results)
+    const isBusinessPage =
+      lowerUrl.includes("/biz/") ||           // Yelp business page
+      lowerUrl.includes("/business/") ||      // BBB business page
+      lowerUrl.includes("/place/") ||         // Google Maps place
+      lowerUrl.includes("/maps/place/") ||
+      lowerTitle.includes("reviews") ||
+      lowerTitle.includes("business");
+
+    return {
+      category: "BUSINESS_LISTING",
+      platform,
+      isProfile: isBusinessPage,
+      confidence: isBusinessPage ? 0.85 : 0.6,
+    };
+  }
+
   // Check for people directories (should have been filtered, but catch stragglers)
   if (domainMatches(domain, DOMAIN_CATEGORY_PATTERNS.PEOPLE_DIRECTORY)) {
     return {
@@ -277,10 +308,12 @@ export function categorizeExaUrl(input: {
 export function isProfileCategory(category: ExaSourceCategory): boolean {
   return [
     "SOCIAL_PROFILE",
-    "PROFESSIONAL_PROFILE", 
+    "PROFESSIONAL_PROFILE",
     "REAL_ESTATE_PROFILE",
     "LICENSE_REGISTRY",
     "BUSINESS_REGISTRY",
+    "BUSINESS_LISTING",
+    "COMPANY_WEBSITE",
   ].includes(category);
 }
 
@@ -294,6 +327,8 @@ export function getCategoryDisplayName(category: ExaSourceCategory): string {
     REAL_ESTATE_PROFILE: "Real Estate",
     LICENSE_REGISTRY: "License Registry",
     BUSINESS_REGISTRY: "Business Registry",
+    BUSINESS_LISTING: "Business Listing",
+    COMPANY_WEBSITE: "Company Website",
     NEWS_MENTION: "News",
     PEOPLE_DIRECTORY: "Directory",
     OTHER: "Web",

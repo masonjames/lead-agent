@@ -160,31 +160,54 @@ export function buildExaQueryPlan(params: QueryPlanParams): ExaQueryTask[] {
     });
   }
 
-  // --- Task 6: Company/Team Website Search (if company provided) ---
-  // High-value: finds team websites, brokerage profiles
+  // --- Task 6: Company/Business Search (if company provided) ---
+  // High-value: finds company websites, business listings, team pages
   const { company } = params;
-  if (company && name) {
-    // Search for company name + person name together
-    const companyQuery = `"${company}" "${name}"`;
+  if (company) {
+    // Search for company name + location to find their website
+    const companyLocationQuery = `"${company}" ${locationContext}`;
 
     tasks.push({
       intent: "company_website",
-      query: companyQuery,
+      query: companyLocationQuery,
       excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
       numResults: 5,
       maxCharacters: DEFAULT_MAX_CHARACTERS,
     });
 
-    // Also search for just the company name to find their website directly
-    const companyOnlyQuery = `"${company}" real estate`;
+    // Search for just the company name (more generic, catches official website)
+    const companyDirectQuery = `"${company}"`;
 
     tasks.push({
       intent: "company_direct",
-      query: companyOnlyQuery,
+      query: companyDirectQuery,
       excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
       numResults: 3,
       maxCharacters: DEFAULT_MAX_CHARACTERS,
     });
+
+    // Search for company on business listing/review sites
+    const companyListingQuery = `"${company}" site:yelp.com OR site:bbb.org OR site:google.com/maps`;
+
+    tasks.push({
+      intent: "company_listing",
+      query: companyListingQuery,
+      numResults: 3,
+      maxCharacters: DEFAULT_MAX_CHARACTERS,
+    });
+
+    // If we also have a name, search for person at company
+    if (name) {
+      const personAtCompanyQuery = `"${name}" "${company}"`;
+
+      tasks.push({
+        intent: "person_at_company",
+        query: personAtCompanyQuery,
+        excludeDomains: EXA_GLOBAL_EXCLUDE_DOMAINS,
+        numResults: 3,
+        maxCharacters: DEFAULT_MAX_CHARACTERS,
+      });
+    }
   }
 
   return tasks;

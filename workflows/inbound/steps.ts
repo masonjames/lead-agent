@@ -384,17 +384,37 @@ export const stepScoreLead = async (
     }
   }
 
-  // Determine if in target area (Manatee County)
+  // Determine if in target area (Manatee & Sarasota Counties)
+  // Service area ZIP codes: 342xx (Manatee/Sarasota area)
+  const addressLower = contact?.address?.toLowerCase() || "";
+  const propertyAddressLower = property?.address?.toLowerCase() || "";
+  const messageLower = report.formData?.message?.toLowerCase() || "";
+
   const isLocalArea =
-    contact?.address?.toLowerCase().includes("manatee") ||
-    contact?.address?.toLowerCase().includes("bradenton") ||
-    contact?.address?.toLowerCase().includes("palmetto") ||
-    contact?.address?.toLowerCase().includes("lakewood ranch") ||
-    property?.address?.toLowerCase().includes("manatee") ||
-    property?.address?.toLowerCase().includes("fl 34") ||
-    // Also check message for location mentions
-    report.formData?.message?.toLowerCase().includes("manatee") ||
-    report.formData?.message?.toLowerCase().includes("bradenton");
+    // Manatee County
+    addressLower.includes("manatee") ||
+    addressLower.includes("bradenton") ||
+    addressLower.includes("palmetto") ||
+    addressLower.includes("lakewood ranch") ||
+    addressLower.includes("ellenton") ||
+    addressLower.includes("parrish") ||
+    // Sarasota County
+    addressLower.includes("sarasota") ||
+    addressLower.includes("venice") ||
+    addressLower.includes("north port") ||
+    addressLower.includes("osprey") ||
+    addressLower.includes("nokomis") ||
+    addressLower.includes("englewood") ||
+    // Property address checks
+    propertyAddressLower.includes("manatee") ||
+    propertyAddressLower.includes("sarasota") ||
+    // ZIP code check for 342xx area
+    /\bfl\s*342\d{2}\b/.test(addressLower) ||
+    /\b342\d{2}\b/.test(addressLower) ||
+    // Message mentions
+    messageLower.includes("manatee") ||
+    messageLower.includes("bradenton") ||
+    messageLower.includes("sarasota");
 
   // Count filled fields for form completeness
   const totalFields = 6; // email, name, phone, company, address, message

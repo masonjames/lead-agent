@@ -221,6 +221,7 @@ export async function enrichWithExa(
       email: params.email,
       phone: params.phone,
       address: params.address,
+      company: params.company,
     };
 
     // Parse location info from address

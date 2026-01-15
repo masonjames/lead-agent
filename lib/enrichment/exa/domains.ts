@@ -142,6 +142,7 @@ export const EXCLUDE_DOMAINS_GOV_TAX_NOISE = [
 
 /**
  * Generic noise domains that don't provide person-specific info
+ * NOTE: yelp.com and bbb.org are NOT excluded - they're valuable for company lookups
  */
 export const EXCLUDE_DOMAINS_GENERIC_NOISE = [
   "wikipedia.org",
@@ -150,12 +151,22 @@ export const EXCLUDE_DOMAINS_GENERIC_NOISE = [
   "ebay.com",
   "youtube.com",           // Video results rarely useful for lead enrichment
   "pinterest.com",
-  "yelp.com",              // Business reviews, not person info
-  "bbb.org",               // Business ratings
   "glassdoor.com",         // Employee reviews
   "indeed.com",            // Job postings
   "salary.com",
   "payscale.com",
+];
+
+/**
+ * Business listing and directory domains (useful for company lookups)
+ */
+export const INCLUDE_DOMAINS_BUSINESS_LISTINGS = [
+  "yelp.com",
+  "bbb.org",
+  "google.com",            // Google Business listings
+  "yellowpages.com",
+  "manta.com",
+  "mapquest.com",
 ];
 
 /**
@@ -243,7 +254,21 @@ export const DOMAIN_CATEGORY_PATTERNS = {
     "floridaweekly.com",
     "patch.com",
   ],
-  
+
+  // Business listings (Yelp, BBB, Google Business, etc.)
+  BUSINESS_LISTING: [
+    "yelp.com",
+    "bbb.org",
+    "google.com",
+    "yellowpages.com",
+    "manta.com",
+    "mapquest.com",
+    "thumbtack.com",
+    "homeadvisor.com",
+    "angieslist.com",
+    "angi.com",
+  ],
+
   // People directories (if they slip through)
   PEOPLE_DIRECTORY: [
     ...EXCLUDE_DOMAINS_PEOPLE_DIRECTORIES,
